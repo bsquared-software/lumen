@@ -71,4 +71,10 @@ import Testing
         ]
         #expect(PresetFactory.updating(preset, from: captured).displays.map(\.uuid) == ["BUILTIN", "LS32"])
     }
+
+    @Test func uniqueNamesCountUpFromTwo() {
+        #expect(PresetFactory.uniqueName("New Preset", existing: ["Night", "Day"]) == "New Preset")
+        #expect(PresetFactory.uniqueName("New Preset", existing: ["New Preset"]) == "New Preset 2")
+        #expect(PresetFactory.uniqueName("New Preset", existing: ["New Preset", "New Preset 2"]) == "New Preset 3")
+    }
 }

@@ -69,4 +69,11 @@ public enum PresetFactory {
             + fresh.filter { target in !preset.displays.contains { $0.uuid == target.uuid } }
         return updated
     }
+
+    /// `base`, or `base 2`, `base 3`… when that name is taken.
+    public static func uniqueName(_ base: String, existing: [String]) -> String {
+        let taken = Set(existing)
+        guard taken.contains(base) else { return base }
+        return (2...).lazy.map { "\(base) \($0)" }.first { !taken.contains($0) }!
+    }
 }

@@ -54,6 +54,32 @@ public enum ModeCatalogue {
         return option.refreshRates.first
     }
 
+    /// The resolutions worth offering in a menu, like the list System Settings shows before
+    /// "Show all resolutions":
+    /// - a standard size is hidden when its HiDPI twin offers every refresh rate it does, so the
+    ///   G81SF's 240 Hz standard modes stay available;
+    /// - anything narrower than 1024 points is hidden;
+    /// - the option containing `current` is always kept.
+    public static func essentialOptions(from options: [ResolutionOption], keeping current: DisplayMode?) -> [ResolutionOption] {
+        let hiDPIRates = Dictionary(
+            options.filter(\.isHiDPI).map { ("\($0.width)x\($0.height)", Set($0.refreshRates.map(DisplayMode.refreshKey))) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        let kept = current.flatMap { option(containing: $0, in: options) }?.id
+
+        return options.filter { option in
+            if option.id == kept { return true }
+            guard option.width >= 1024 else { return false }
+            guard !option.isHiDPI, let twin = hiDPIRates["\(option.width)x\(option.height)"] else { return true }
+            return !Set(option.refreshRates.map(DisplayMode.refreshKey)).isSubset(of: twin)
+        }
+    }
+
+    /// "2560 × 1440 HiDPI · 120 Hz"
+    public static func summary(_ mode: DisplayMode) -> String {
+        "\(mode.width) × \(mode.height)\(mode.isHiDPI ? " HiDPI" : "") · \(refreshLabel(mode.refreshRate))"
+    }
+
     public static func refreshLabel(_ rate: Double) -> String {
         guard rate > 0 else { return "Auto" }
         let hundredths = DisplayMode.refreshKey(rate)
