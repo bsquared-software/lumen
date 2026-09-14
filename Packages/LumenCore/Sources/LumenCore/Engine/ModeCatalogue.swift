@@ -1,0 +1,72 @@
+/// A resolution the user can pick: a size in points, HiDPI or not, and the refresh rates
+/// available at that size.
+public struct ResolutionOption: Hashable, Sendable, Identifiable {
+    public let width: Int
+    public let height: Int
+    public let isHiDPI: Bool
+    /// Descending, de-duplicated.
+    public let refreshRates: [Double]
+
+    public var id: String { "\(width)x\(height)\(isHiDPI ? "@2x" : "")" }
+    public var label: String { "\(width) × \(height)" }
+}
+
+/// Turns the long, duplicate-heavy mode list CoreGraphics returns (150 usable modes on the
+/// G81SF) into a short list of resolution options.
+public enum ModeCatalogue {
+    public static func options(from modes: [DisplayMode]) -> [ResolutionOption] {
+        let groups = Dictionary(grouping: modes) { GroupKey(width: $0.width, height: $0.height, isHiDPI: $0.isHiDPI) }
+        return groups
+            .map { key, modes in
+                var seen = Set<Int>()
+                let rates = modes.map(\.refreshRate)
+                    .sorted(by: >)
+                    .filter { seen.insert(DisplayMode.rateKey($0)).inserted }
+                return ResolutionOption(width: key.width, height: key.height, isHiDPI: key.isHiDPI, refreshRates: rates)
+            }
+            .sorted { lhs, rhs in
+                if lhs.width != rhs.width { return lhs.width > rhs.width }
+                if lhs.height != rhs.height { return lhs.height > rhs.height }
+                return lhs.isHiDPI && !rhs.isHiDPI
+            }
+    }
+
+    /// The concrete mode for an option and rate. When several modes qualify, the one with the
+    /// largest pixel backing wins, since it renders sharpest.
+    public static func mode(for option: ResolutionOption, refreshRate: Double, in modes: [DisplayMode]) -> DisplayMode? {
+        modes
+            .filter {
+                $0.width == option.width && $0.height == option.height && $0.isHiDPI == option.isHiDPI
+                    && DisplayMode.rateKey($0.refreshRate) == DisplayMode.rateKey(refreshRate)
+            }
+            .max { $0.pixelWidth * $0.pixelHeight < $1.pixelWidth * $1.pixelHeight }
+    }
+
+    public static func option(containing mode: DisplayMode, in options: [ResolutionOption]) -> ResolutionOption? {
+        options.first { $0.width == mode.width && $0.height == mode.height && $0.isHiDPI == mode.isHiDPI }
+    }
+
+    /// Keeps the current rate when the new resolution offers it, otherwise the fastest.
+    public static func preferredRefreshRate(for option: ResolutionOption, current: Double?) -> Double? {
+        if let current, option.refreshRates.contains(where: { DisplayMode.rateKey($0) == DisplayMode.rateKey(current) }) {
+            return current
+        }
+        return option.refreshRates.first
+    }
+
+    public static func refreshLabel(_ rate: Double) -> String {
+        guard rate > 0 else { return "Auto" }
+        let hundredths = DisplayMode.rateKey(rate)
+        let whole = hundredths / 100
+        let fraction = hundredths % 100
+        if fraction == 0 { return "\(whole) Hz" }
+        let digits = fraction % 10 == 0 ? "\(fraction / 10)" : (fraction < 10 ? "0\(fraction)" : "\(fraction)")
+        return "\(whole).\(digits) Hz"
+    }
+
+    private struct GroupKey: Hashable {
+        let width: Int
+        let height: Int
+        let isHiDPI: Bool
+    }
+}
