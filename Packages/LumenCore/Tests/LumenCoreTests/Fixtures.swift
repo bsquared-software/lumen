@@ -3,18 +3,19 @@
 extension DisplayInfo {
     static func fixture(
         uuid: String, name: String, displayID: UInt32, vendor: UInt32 = 1, model: UInt32 = 1, serial: UInt32 = 1,
-        isBuiltin: Bool = false
+        isBuiltin: Bool = false, originX: Int? = nil
     ) -> DisplayInfo {
         DisplayInfo(uuid: uuid, displayID: displayID, name: name, vendor: vendor, model: model,
-                    serial: serial, isBuiltin: isBuiltin)
+                    serial: serial, isBuiltin: isBuiltin, originX: originX)
     }
 }
 
 /// Brandon's desk: the MacBook plus two Samsungs.
 enum Desk {
-    static let builtin = DisplayInfo.fixture(uuid: "BUILTIN", name: "Built-in Display", displayID: 1, vendor: 1552, model: 41040, serial: 9, isBuiltin: true)
-    static let g81 = DisplayInfo.fixture(uuid: "G81", name: "Odyssey G81SF", displayID: 2, vendor: 19501, model: 30540, serial: 811091798)
-    static let ls32 = DisplayInfo.fixture(uuid: "LS32", name: "LS32D70xE", displayID: 3, vendor: 19501, model: 30291, serial: 809582919)
+    // The real arrangement: G81SF on the left, MacBook in the middle, LS32D70xE on the right.
+    static let builtin = DisplayInfo.fixture(uuid: "BUILTIN", name: "Built-in Display", displayID: 1, vendor: 1552, model: 41040, serial: 9, isBuiltin: true, originX: 0)
+    static let g81 = DisplayInfo.fixture(uuid: "G81", name: "Odyssey G81SF", displayID: 2, vendor: 19501, model: 30540, serial: 811091798, originX: -2048)
+    static let ls32 = DisplayInfo.fixture(uuid: "LS32", name: "LS32D70xE", displayID: 3, vendor: 19501, model: 30291, serial: 809582919, originX: 1728)
 
     static func framebuffer(_ info: DisplayInfo, port: String) -> FramebufferAttributes {
         FramebufferAttributes(port: port, vendor: info.vendor, model: info.model, serial: info.serial, productName: info.name)

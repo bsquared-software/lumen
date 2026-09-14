@@ -28,7 +28,8 @@ public final class SystemDisplayBackend: DisplayBackend {
             var info = DisplayInfo(
                 uuid: uuid, displayID: id, name: "Display \(id)",
                 vendor: CGDisplayVendorNumber(id), model: CGDisplayModelNumber(id), serial: CGDisplaySerialNumber(id),
-                isBuiltin: CGDisplayIsBuiltin(id) != 0
+                isBuiltin: CGDisplayIsBuiltin(id) != 0,
+                originX: Int(CGDisplayBounds(id).origin.x)
             )
             if info.isBuiltin {
                 info.name = "Built-in Display"

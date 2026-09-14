@@ -78,4 +78,23 @@ import Testing
         ])
         #expect(PresetPlanner.plan(preset, displays: Desk.allOnline).steps == [.disconnect(uuid: "LS32")])
     }
+
+    @Test func skipsNameDisplaysByTheirCustomName() {
+        let preset = Preset(name: "Off", symbol: "moon", displays: [
+            DisplayTarget(uuid: "BUILTIN", name: "Built-in Display", connected: false),
+        ])
+        let displays = [KnownDisplay(info: Desk.builtin, status: .online, customName: "MacBook")]
+        #expect(PresetPlanner.plan(preset, displays: displays).skipped == [.builtinStaysOn(name: "MacBook")])
+    }
+
+    @Test func connectionsMatchWhenOnlyValuesWouldChange() {
+        #expect(PresetPlanner.connectionsMatch(Desk.night, displays: Desk.nightState))
+        #expect(PresetPlanner.connectionsMatch(Desk.day, displays: Desk.allOnline))
+    }
+
+    // After a restart the monitors are back on, so a remembered Night is no longer true.
+    @Test func connectionsDoNotMatchWhenDisplaysWouldSwitch() {
+        #expect(!PresetPlanner.connectionsMatch(Desk.night, displays: Desk.allOnline))
+        #expect(!PresetPlanner.connectionsMatch(Desk.day, displays: Desk.nightState))
+    }
 }

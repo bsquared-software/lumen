@@ -150,8 +150,9 @@ import Testing
         let records = [Self.allRecords[0], Self.allRecords[1], DisplayRecord(info: Desk.ls32, disconnectedByLumen: true)]
         let snapshot = await Self.worker(backend, records: records).snapshot()
 
+        // Desk order: G81SF, MacBook, LS32D70xE.
         #expect(snapshot.displays.map(\.known.status) == [.online, .online, .disconnected])
-        #expect(snapshot.displays.map(\.brightness) == [0.5, nil, nil])
+        #expect(snapshot.displays.map(\.brightness) == [nil, 0.5, nil])
         #expect(snapshot.displays[0].currentMode == Desk.hiDPI1440)
         #expect(snapshot.displays[0].options.map(\.id) == ["2560x1440@2x"])
     }
@@ -161,6 +162,25 @@ import Testing
         backend.configure { $0.noBrightness = [3] }
         let worker = Self.worker(backend, records: Self.allRecords)
         await #expect(throws: DisplayError.brightnessUnsupported) { try await worker.setBrightness(0.4, uuid: "LS32") }
+    }
+
+    @Test func renamingADisplayShowsInSnapshotsAndReports() async {
+        let backend = FakeBackend(displays: Self.desk, enabled: [1])
+        let worker = Self.worker(backend, records: Self.nightRecords)
+        await worker.rename(uuid: "BUILTIN", to: "  MacBook  ")
+
+        #expect(await worker.snapshot().displays.first { $0.id == "BUILTIN" }?.known.displayName == "MacBook")
+        let report = await worker.setConnected(false, uuid: "BUILTIN")
+        #expect(report.skipped == [.wouldLeaveNoDisplay(name: "MacBook")])
+    }
+
+    @Test func aBlankNameRestoresTheHardwareName() async {
+        let backend = FakeBackend(displays: Self.desk)
+        let worker = Self.worker(backend, records: Self.allRecords)
+        await worker.rename(uuid: "LS32", to: "Right")
+        await worker.rename(uuid: "LS32", to: "   ")
+
+        #expect(await worker.snapshot().records.first { $0.id == "LS32" }?.customName == nil)
     }
 
     @Test func reportMessagesReadNaturally() {

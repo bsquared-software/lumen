@@ -18,7 +18,8 @@ public enum DisplayRegistry {
         return merged
     }
 
-    /// Every remembered display with its status, built-in first.
+    /// Every remembered display with its status, left to right as arranged on the desk. Displays
+    /// with no known position follow, in the order they were first seen.
     public static func knownDisplays(
         records: [DisplayRecord], online: [DisplayInfo], framebuffers: [FramebufferAttributes],
         switchingOff: Set<String> = []
@@ -27,9 +28,18 @@ public enum DisplayRegistry {
         let known = merge(records: records, online: online, keepingFlagsFor: switchingOff).map { record in
             let current = switchingOff.contains(record.id) ? nil : onlineByID[record.id]
             let status = DisplayStatus.resolve(record: record, online: current, isAttached: isAttached(record.info, framebuffers: framebuffers))
-            return KnownDisplay(info: current ?? record.info, status: status)
+            return KnownDisplay(info: current ?? record.info, status: status, customName: record.customName)
         }
-        return known.filter(\.info.isBuiltin) + known.filter { !$0.info.isBuiltin }
+        return known.enumerated()
+            .sorted { lhs, rhs in
+                switch (lhs.element.info.originX, rhs.element.info.originX) {
+                case let (left?, right?) where left != right: left < right
+                case (.some, nil): true
+                case (nil, .some): false
+                default: lhs.offset < rhs.offset
+                }
+            }
+            .map(\.element)
     }
 
     public static func isAttached(_ info: DisplayInfo, framebuffers: [FramebufferAttributes]) -> Bool {

@@ -1,5 +1,6 @@
 import CoreGraphics
 import Dispatch
+import Foundation
 
 /// A display with the live values the UI shows.
 public struct DisplayDetail: Hashable, Sendable, Identifiable {
@@ -84,7 +85,7 @@ public actor DisplayWorker {
             var unreachable = Set<String>()
             connect(display.info, report: &report, unreachable: &unreachable)
             if unreachable.isEmpty {
-                report.failures += await waitForOnline([uuid]).map { _ in DisplayFailure(name: display.info.name, reason: .didNotComeBack) }
+                report.failures += await waitForOnline([uuid]).map { _ in DisplayFailure(name: display.displayName, reason: .didNotComeBack) }
             }
         } else {
             await disconnect(uuid, report: &report)
@@ -94,6 +95,17 @@ public actor DisplayWorker {
     }
 
     /// Throws so the UI can show why a monitor ignored the slider.
+    /// Gives a display a friendlier name. Blank restores the hardware name.
+    public func rename(uuid: String, to name: String) {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        records = records.map { record in
+            guard record.id == uuid else { return record }
+            var renamed = record
+            renamed.customName = trimmed.isEmpty ? nil : trimmed
+            return renamed
+        }
+    }
+
     public func setBrightness(_ value: Double, uuid: String) throws {
         guard let info = onlineInfo(uuid) else { return }
         try backend.setBrightness(value, of: info)
@@ -169,7 +181,7 @@ public actor DisplayWorker {
             try backend.setEnabled(true, displayID: info.displayID)
         } catch {
             unreachable.insert(info.uuid)
-            report.failures.append(.backend(info.name, error))
+            report.failures.append(.backend(name(of: info.uuid), error))
         }
     }
 
@@ -180,7 +192,7 @@ public actor DisplayWorker {
         let known = knownDisplays()
         guard let display = known.first(where: { $0.id == uuid }), display.status == .online else { return }
         guard SafetyRules.canDisconnect(uuid, in: known) else {
-            report.skipped.append(.wouldLeaveNoDisplay(name: display.info.name))
+            report.skipped.append(.wouldLeaveNoDisplay(name: display.displayName))
             return
         }
 
@@ -191,7 +203,7 @@ public actor DisplayWorker {
             try backend.setEnabled(false, displayID: display.info.displayID)
         } catch {
             records = DisplayRegistry.setDisconnectedByLumen(false, uuid: uuid, in: records)
-            report.failures.append(.backend(display.info.name, error))
+            report.failures.append(.backend(display.displayName, error))
             return
         }
         await waitUntil { !$0.contains(uuid) }
@@ -205,7 +217,7 @@ public actor DisplayWorker {
         do {
             try body(info)
         } catch {
-            report.failures.append(.backend(info.name, error))
+            report.failures.append(.backend(name(of: uuid), error))
         }
     }
 
@@ -234,6 +246,7 @@ public actor DisplayWorker {
     }
 
     private func name(of uuid: String) -> String {
-        records.first { $0.id == uuid }?.info.name ?? "A display"
+        guard let record = records.first(where: { $0.id == uuid }) else { return "A display" }
+        return record.customName ?? record.info.name
     }
 }

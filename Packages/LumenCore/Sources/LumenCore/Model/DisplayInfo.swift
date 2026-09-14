@@ -14,10 +14,13 @@ public struct DisplayInfo: Codable, Hashable, Sendable, Identifiable {
     public var model: UInt32
     public var serial: UInt32
     public var isBuiltin: Bool
+    /// Left edge in the display arrangement, in points. Remembered while a display is off, so it
+    /// keeps its place in the list. `nil` in settings saved before Lumen tracked it.
+    public var originX: Int?
 
     public init(
         uuid: String, displayID: CGDirectDisplayID, name: String, vendor: UInt32, model: UInt32,
-        serial: UInt32, isBuiltin: Bool
+        serial: UInt32, isBuiltin: Bool, originX: Int? = nil
     ) {
         self.uuid = uuid
         self.displayID = displayID
@@ -26,5 +29,6 @@ public struct DisplayInfo: Codable, Hashable, Sendable, Identifiable {
         self.model = model
         self.serial = serial
         self.isBuiltin = isBuiltin
+        self.originX = originX
     }
 }

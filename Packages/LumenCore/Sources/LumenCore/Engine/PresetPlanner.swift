@@ -35,7 +35,7 @@ public enum PresetPlanner {
 
         for target in preset.displays {
             guard let display = byID[target.uuid], display.status != .unavailable else {
-                skipped.append(.notAttached(name: target.name))
+                skipped.append(.notAttached(name: byID[target.uuid]?.displayName ?? target.name))
                 continue
             }
 
@@ -47,9 +47,9 @@ public enum PresetPlanner {
                 }
             } else if display.status == .online {
                 if display.info.isBuiltin {
-                    skipped.append(.builtinStaysOn(name: display.info.name))
+                    skipped.append(.builtinStaysOn(name: display.displayName))
                 } else {
-                    disconnects.append((target.uuid, display.info.name))
+                    disconnects.append((target.uuid, display.displayName))
                 }
             }
         }
@@ -63,5 +63,19 @@ public enum PresetPlanner {
         if !connects.isEmpty { steps.append(.waitForOnline(uuids: connects)) }
         steps += modes + brightness + disconnects.map { .disconnect(uuid: $0.uuid) }
         return PresetPlan(steps: steps, skipped: skipped)
+    }
+
+    /// Whether every display is already switched on or off the way the preset wants. Used to
+    /// decide if a remembered active preset is still true after Lumen relaunches.
+    public static func connectionsMatch(_ preset: Preset, displays: [KnownDisplay]) -> Bool {
+        let plan = plan(preset, displays: displays)
+        let switches = plan.steps.contains { step in
+            switch step {
+            case .connect, .disconnect: true
+            case .waitForOnline, .setMode, .setBrightness: false
+            }
+        }
+        let refused = plan.skipped.contains { if case .wouldLeaveNoDisplay = $0 { true } else { false } }
+        return !switches && !refused
     }
 }
