@@ -35,7 +35,8 @@ struct PresetsSettingsView: View {
                     controller.reorderPresets(reordered)
                 }
             }
-            .navigationSplitViewColumnWidth(min: 180, ideal: 210, max: 280)
+            .frame(minWidth: 220)
+            .navigationSplitViewColumnWidth(min: 220, ideal: 230)
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 HStack(spacing: 4) {
                     Button("Add Preset from Current Setup", systemImage: "plus") {
@@ -94,6 +95,8 @@ private struct PresetRow: View {
     var body: some View {
         HStack {
             Label(preset.name, systemImage: preset.symbol)
+                .lineLimit(1)
+                .layoutPriority(1)
             Spacer()
             if let hotkey = preset.hotkey {
                 Text(hotkey.displayString)

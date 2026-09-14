@@ -112,6 +112,7 @@ private struct LoginItemOffer: View {
         VStack(alignment: .leading, spacing: 8) {
             Label("Open Lumen at login so your shortcuts still work after a restart?", systemImage: "power.circle")
                 .font(.callout)
+                .fixedSize(horizontal: false, vertical: true)
             HStack {
                 Spacer()
                 Button("Not Now") { controller.declineLoginItem() }
