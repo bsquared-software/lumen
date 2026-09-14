@@ -1,0 +1,41 @@
+name: Lumen
+options:
+  bundleIdPrefix: com.bsquared
+  deploymentTarget:
+    macOS: "26.0"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    SWIFT_VERSION: "6.0"
+    DEVELOPMENT_TEAM: "QWC85H9M8G" # BSquared / Brandon Robert Bridges — paid Developer Program team
+    CODE_SIGN_STYLE: Automatic
+
+packages:
+  LumenCore:
+    path: Packages/LumenCore
+
+targets:
+  Lumen:
+    type: application
+    platform: macOS
+    sources:
+      - path: Lumen
+    dependencies:
+      - package: LumenCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.bsquared.lumen
+        GENERATE_INFOPLIST_FILE: YES
+        # Menu bar only: no Dock icon, no app menu.
+        INFOPLIST_KEY_LSUIElement: YES
+        INFOPLIST_KEY_CFBundleDisplayName: Lumen
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.utilities
+        INFOPLIST_KEY_NSHumanReadableCopyright: "© 2026 BSquared Software Development Ltd"
+        # Lumen calls private display APIs (SkyLight, DisplayServices, IOAVService), which the
+        # App Sandbox blocks. It is never distributed through the App Store.
+        ENABLE_APP_SANDBOX: NO
+        ENABLE_HARDENED_RUNTIME: YES
+        SWIFT_STRICT_CONCURRENCY: complete
