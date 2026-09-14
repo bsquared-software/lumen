@@ -176,12 +176,14 @@ private struct PresetEditor: View {
             ForEach(PresetFactory.deskOrder(of: draft.displays, displays: known), id: \.self) { uuid in
                 if let target = binding(for: uuid) {
                     let detail = controller.displays.first { $0.id == uuid }
-                    Section(detail?.known.displayName ?? target.wrappedValue.name) {
-                        TargetEditor(target: target, detail: detail)
+                    let name = detail?.known.displayName ?? target.wrappedValue.name
+                    Section(name) {
+                        TargetEditor(target: target, detail: detail, displayName: name)
                         Button("Remove from Preset", role: .destructive) {
                             draft = PresetFactory.removing(uuid, from: draft)
                         }
                         .buttonStyle(.borderless)
+                        .accessibilityLabel("Remove \(name) from Preset")
                     }
                 }
             }
@@ -194,6 +196,7 @@ private struct PresetEditor: View {
                             Button("Add to Preset", systemImage: "plus.circle") {
                                 draft = PresetFactory.adding(display, to: draft)
                             }
+                            .accessibilityLabel("Add \(display.displayName) to Preset")
                         }
                     }
                 } header: {
@@ -264,6 +267,8 @@ private struct PresetEditor: View {
 private struct TargetEditor: View {
     @Binding var target: DisplayTarget
     let detail: DisplayDetail?
+    /// Folded into accessibility labels: every display section has the same controls.
+    let displayName: String
 
     private var options: [ResolutionOption] {
         ModeCatalogue.essentialOptions(from: detail?.options ?? [], keeping: target.mode)
@@ -271,19 +276,26 @@ private struct TargetEditor: View {
 
     var body: some View {
         Toggle("Switched on", isOn: $target.connected)
+            .accessibilityLabel("\(displayName) switched on")
 
         if target.connected {
             Toggle("Set brightness", isOn: Binding(
                 get: { target.brightness != nil },
                 set: { target.brightness = $0 ? detail?.brightness ?? 0.5 : nil }
             ))
+            .accessibilityLabel("Set brightness for \(displayName)")
             if let brightness = target.brightness {
                 LabeledContent("Brightness") {
                     HStack {
-                        Slider(value: Binding(get: { brightness }, set: { target.brightness = $0 }), in: 0...1)
+                        Slider(value: Binding(get: { brightness }, set: { target.brightness = $0 }), in: 0...1) {
+                            Text("Brightness, \(displayName)")
+                        }
+                        .labelsHidden()
+                        .accessibilityValue(Text(brightness, format: .percent.precision(.fractionLength(0))))
                         Text(brightness, format: .percent.precision(.fractionLength(0)))
                             .monospacedDigit()
-                            .frame(width: 40, alignment: .trailing)
+                            .frame(minWidth: 40, alignment: .trailing)
+                            .accessibilityHidden(true)
                     }
                     .frame(width: 240)
                 }

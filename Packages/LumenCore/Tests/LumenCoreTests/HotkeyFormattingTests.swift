@@ -37,4 +37,10 @@ import Testing
         #expect(HotkeyFormatting.keyLabel(keyCode: 45, characters: "n") == "N")
         #expect(HotkeyFormatting.keyLabel(keyCode: 200, characters: nil) == "Key 200")
     }
+
+    @Test func spokenDescriptionNamesModifiersInWords() {
+        let hotkey = Hotkey(keyCode: 45, modifiers: HotkeyModifiers.control | HotkeyModifiers.option | HotkeyModifiers.command, keyLabel: "N")
+        #expect(hotkey.spokenDescription == "Control Option Command N")
+        #expect(Hotkey(keyCode: 49, modifiers: HotkeyModifiers.shift | HotkeyModifiers.command, keyLabel: "Space").spokenDescription == "Shift Command Space")
+    }
 }

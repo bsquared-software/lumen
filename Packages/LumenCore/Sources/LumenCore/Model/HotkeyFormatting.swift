@@ -51,4 +51,19 @@ extension Hotkey {
     public var displayString: String {
         HotkeyFormatting.modifierSymbols(modifiers) + keyLabel
     }
+
+    /// For VoiceOver: "Control Option Command N" rather than symbols it reads awkwardly.
+    public var spokenDescription: String {
+        let names: [(UInt32, String)] = [
+            (HotkeyModifiers.control, "Control"), (HotkeyModifiers.option, "Option"),
+            (HotkeyModifiers.shift, "Shift"), (HotkeyModifiers.command, "Command"),
+        ]
+        let keyNames = [
+            "↩": "Return", "⇥": "Tab", "⌫": "Delete", "⎋": "Escape", "⌦": "Forward Delete",
+            "←": "Left Arrow", "→": "Right Arrow", "↓": "Down Arrow", "↑": "Up Arrow",
+            "↖": "Home", "↘": "End", "⇞": "Page Up", "⇟": "Page Down",
+        ]
+        let modifierWords = names.filter { modifiers & $0.0 != 0 }.map(\.1)
+        return (modifierWords + [keyNames[keyLabel] ?? keyLabel]).joined(separator: " ")
+    }
 }

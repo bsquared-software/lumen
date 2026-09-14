@@ -15,9 +15,12 @@ struct ShortcutRecorder: View {
             Button {
                 isRecording ? stop() : start()
             } label: {
-                Text(isRecording ? "Type shortcut…" : hotkey?.displayString ?? "Record Shortcut")
+                Text(isRecording ? "Type Shortcut…" : hotkey?.displayString ?? "Record Shortcut")
                     .frame(minWidth: 110)
             }
+            .accessibilityLabel("Shortcut")
+            .accessibilityValue(isRecording ? "Recording, type a shortcut" : hotkey?.spokenDescription ?? "None")
+            .accessibilityHint("Records a new keyboard shortcut. Press Escape to cancel or Delete to clear.")
             if hotkey != nil, !isRecording {
                 Button("Clear Shortcut", systemImage: "xmark.circle.fill") { hotkey = nil }
                     .labelStyle(.iconOnly)
