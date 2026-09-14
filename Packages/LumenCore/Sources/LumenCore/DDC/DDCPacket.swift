@@ -38,6 +38,7 @@ public enum DDCPacket {
     public static let chipAddress: UInt32 = 0x37
     public static let dataAddress: UInt32 = 0x51
     public static let brightnessVCP: UInt8 = 0x10
+    public static let contrastVCP: UInt8 = 0x12
     /// Length of a "Get VCP Feature" reply.
     public static let replyLength = 11
 

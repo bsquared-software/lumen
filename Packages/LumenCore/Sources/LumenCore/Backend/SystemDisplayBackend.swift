@@ -7,7 +7,7 @@ import Synchronization
 /// `CGSConfigureDisplayEnabled` for connect/disconnect, DisplayServices for Apple panels and
 /// DDC/CI over IOAVService for other monitors.
 public final class SystemDisplayBackend: DisplayBackend {
-    /// DDC maximum per display UUID, so a brightness write does not need a read first.
+    /// DDC maximum per display UUID and VCP code, so a write does not need a read first.
     private let ddcMaximums = Mutex<[String: UInt16]>([:])
 
     public init() {}
@@ -65,9 +65,7 @@ public final class SystemDisplayBackend: DisplayBackend {
             guard get(display.displayID, &value) == 0 else { throw DisplayError.brightnessUnsupported }
             return Double(value)
         }
-        let value = try readVCP(DDCPacket.brightnessVCP, of: display)
-        ddcMaximums.withLock { $0[display.uuid] = value.maximum }
-        return value.normalised
+        return try ddcValue(DDCPacket.brightnessVCP, of: display)
     }
 
     public func setBrightness(_ value: Double, of display: DisplayInfo) throws {
@@ -77,10 +75,33 @@ public final class SystemDisplayBackend: DisplayBackend {
             guard set(display.displayID, Float(clamped)) == 0 else { throw DisplayError.brightnessUnsupported }
             return
         }
-        let knownMaximum = ddcMaximums.withLock { $0[display.uuid] }
-        let maximum = try knownMaximum ?? readVCP(DDCPacket.brightnessVCP, of: display).maximum
-        ddcMaximums.withLock { $0[display.uuid] = maximum }
-        try writeVCP(DDCPacket.brightnessVCP, value: VCPValue.raw(forNormalised: clamped, maximum: maximum), of: display)
+        try setDDCValue(clamped, vcp: DDCPacket.brightnessVCP, of: display)
+    }
+
+    // MARK: Contrast
+
+    public func contrast(of display: DisplayInfo) throws -> Double {
+        guard !display.isBuiltin else { throw DisplayError.contrastUnsupported }
+        return try ddcValue(DDCPacket.contrastVCP, of: display)
+    }
+
+    public func setContrast(_ value: Double, of display: DisplayInfo) throws {
+        guard !display.isBuiltin else { throw DisplayError.contrastUnsupported }
+        try setDDCValue(min(1, max(0, value)), vcp: DDCPacket.contrastVCP, of: display)
+    }
+
+    private func ddcValue(_ vcp: UInt8, of display: DisplayInfo) throws -> Double {
+        let value = try readVCP(vcp, of: display)
+        ddcMaximums.withLock { $0["\(display.uuid)-\(vcp)"] = value.maximum }
+        return value.normalised
+    }
+
+    private func setDDCValue(_ value: Double, vcp: UInt8, of display: DisplayInfo) throws {
+        let key = "\(display.uuid)-\(vcp)"
+        let knownMaximum = ddcMaximums.withLock { $0[key] }
+        let maximum = try knownMaximum ?? readVCP(vcp, of: display).maximum
+        ddcMaximums.withLock { $0[key] = maximum }
+        try writeVCP(vcp, value: VCPValue.raw(forNormalised: value, maximum: maximum), of: display)
     }
 
     private func usesDisplayServices(_ display: DisplayInfo) -> Bool {
@@ -146,9 +167,15 @@ public final class SystemDisplayBackend: DisplayBackend {
                 let didRead = reply.withUnsafeMutableBytes {
                     read(service, DDCPacket.chipAddress, DDCPacket.dataAddress, $0.baseAddress!, UInt32($0.count))
                 }
-                if wrote == KERN_SUCCESS, didRead == KERN_SUCCESS,
-                   let value = try? DDCPacket.parseGetVCPReply(reply, vcp: vcp) {
-                    return value
+                if wrote == KERN_SUCCESS, didRead == KERN_SUCCESS {
+                    do {
+                        return try DDCPacket.parseGetVCPReply(reply, vcp: vcp)
+                    } catch DDCError.unsupported {
+                        // The monitor answered clearly; asking again won't change its mind.
+                        throw vcp == DDCPacket.contrastVCP ? DisplayError.contrastUnsupported : DisplayError.brightnessUnsupported
+                    } catch {
+                        // A garbled or partial reply: retry.
+                    }
                 }
                 if attempt < 3 { usleep(40_000) }
             }

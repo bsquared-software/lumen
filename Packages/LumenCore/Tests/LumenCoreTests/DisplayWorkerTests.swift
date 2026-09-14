@@ -157,6 +157,22 @@ import Testing
         #expect(snapshot.displays[0].options.map(\.id) == ["2560x1440@2x"])
     }
 
+    @Test func snapshotReadsContrastOnlyFromMonitorsThatAnswerDDC() async {
+        let backend = FakeBackend(displays: Self.desk)
+        backend.configure { $0.noBrightness = [2]; $0.contrast = [3: 0.6] }
+        let snapshot = await Self.worker(backend, records: Self.allRecords).snapshot()
+
+        // G81 didn't answer the brightness query, so contrast isn't tried; the MacBook has no DDC.
+        #expect(snapshot.displays.map(\.contrast) == [nil, nil, 0.6])
+        #expect(backend.state.withLock { $0.contrastReads } == 1)
+    }
+
+    @Test func settingContrastReachesTheMonitor() async throws {
+        let backend = FakeBackend(displays: Self.desk)
+        try await Self.worker(backend, records: Self.allRecords).setContrast(0.7, uuid: "LS32")
+        #expect(backend.calls == [.setContrast(0.7, 3)])
+    }
+
     @Test func brightnessFailuresReachTheCaller() async {
         let backend = FakeBackend(displays: Self.desk)
         backend.configure { $0.noBrightness = [3] }

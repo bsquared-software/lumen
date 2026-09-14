@@ -10,6 +10,7 @@ final class FakeBackend: DisplayBackend {
         case setEnabled(Bool, CGDirectDisplayID)
         case setBrightness(Double, CGDirectDisplayID)
         case setMode(DisplayMode, CGDirectDisplayID)
+        case setContrast(Double, CGDirectDisplayID)
     }
 
     struct State {
@@ -27,6 +28,9 @@ final class FakeBackend: DisplayBackend {
         var failingEnable: Set<CGDirectDisplayID> = []
         var failingDisable: Set<CGDirectDisplayID> = []
         var noBrightness: Set<CGDirectDisplayID> = []
+        var contrast: [CGDirectDisplayID: Double] = [:]
+        var noContrast: Set<CGDirectDisplayID> = []
+        var contrastReads = 0
     }
 
     let state: Mutex<State>
@@ -88,6 +92,22 @@ final class FakeBackend: DisplayBackend {
             guard !state.noBrightness.contains(display.displayID) else { throw DisplayError.brightnessUnsupported }
             state.calls.append(.setBrightness(value, display.displayID))
             state.brightness[display.displayID] = value
+        }
+    }
+
+    func contrast(of display: DisplayInfo) throws -> Double {
+        try state.withLock { state in
+            state.contrastReads += 1
+            guard !display.isBuiltin, !state.noContrast.contains(display.displayID) else { throw DisplayError.contrastUnsupported }
+            return state.contrast[display.displayID] ?? 0.9
+        }
+    }
+
+    func setContrast(_ value: Double, of display: DisplayInfo) throws {
+        try state.withLock { state in
+            guard !display.isBuiltin, !state.noContrast.contains(display.displayID) else { throw DisplayError.contrastUnsupported }
+            state.calls.append(.setContrast(value, display.displayID))
+            state.contrast[display.displayID] = value
         }
     }
 

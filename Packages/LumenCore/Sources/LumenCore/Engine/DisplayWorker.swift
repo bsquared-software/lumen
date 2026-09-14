@@ -9,14 +9,17 @@ public struct DisplayDetail: Hashable, Sendable, Identifiable {
     public var known: KnownDisplay
     /// `nil` when the display is off or its brightness cannot be read.
     public var brightness: Double?
+    /// `nil` for the built-in display, displays that are off, and monitors without DDC contrast.
+    public var contrast: Double?
     public var modes: [DisplayMode]
     public var currentMode: DisplayMode?
     /// `modes` grouped for pickers, computed once per snapshot rather than on every render.
     public let options: [ResolutionOption]
 
-    public init(known: KnownDisplay, brightness: Double?, modes: [DisplayMode], currentMode: DisplayMode?) {
+    public init(known: KnownDisplay, brightness: Double?, contrast: Double? = nil, modes: [DisplayMode], currentMode: DisplayMode?) {
         self.known = known
         self.brightness = brightness
+        self.contrast = contrast
         self.modes = modes
         self.currentMode = currentMode
         self.options = ModeCatalogue.options(from: modes)
@@ -66,11 +69,13 @@ public actor DisplayWorker {
                 return DisplayDetail(known: display, brightness: nil, modes: [], currentMode: nil)
             }
             let id = display.info.displayID
+            let brightness = try? backend.brightness(of: display.info)
+            // A monitor that didn't answer DDC for brightness won't for contrast either, and each
+            // unanswered query costs a few hundred milliseconds of retries.
+            let contrast = display.info.isBuiltin || brightness == nil ? nil : try? backend.contrast(of: display.info)
             return DisplayDetail(
-                known: display,
-                brightness: try? backend.brightness(of: display.info),
-                modes: backend.modes(of: id),
-                currentMode: backend.currentMode(of: id)
+                known: display, brightness: brightness, contrast: contrast,
+                modes: backend.modes(of: id), currentMode: backend.currentMode(of: id)
             )
         }
         return DisplaySnapshot(records: records, displays: displays)
@@ -109,6 +114,11 @@ public actor DisplayWorker {
     public func setBrightness(_ value: Double, uuid: String) throws {
         guard let info = onlineInfo(uuid) else { return }
         try backend.setBrightness(value, of: info)
+    }
+
+    public func setContrast(_ value: Double, uuid: String) throws {
+        guard let info = onlineInfo(uuid) else { return }
+        try backend.setContrast(value, of: info)
     }
 
     public func setMode(_ mode: DisplayMode, uuid: String) throws {

@@ -2,6 +2,18 @@ import Testing
 @testable import LumenCore
 
 @Suite struct DDCPacketTests {
+    @Test func getRequestForContrast() {
+        #expect(DDCPacket.getVCPRequest(DDCPacket.contrastVCP) == [0x82, 0x01, 0x12, 0xAE])
+    }
+
+    // Real contrast replies from 2026-09-14: LS32D70xE at 50 of 50, G81SF at 45 of 50.
+    @Test func parsesRealContrastReplies() throws {
+        let ls32: [UInt8] = [0x6E, 0x88, 0x02, 0x00, 0x12, 0x00, 0x00, 0x32, 0x00, 0x32, 0xA6]
+        let g81: [UInt8] = [0x6E, 0x88, 0x02, 0x00, 0x12, 0x00, 0x00, 0x32, 0x00, 0x2D, 0xB9]
+        #expect(try DDCPacket.parseGetVCPReply(ls32, vcp: 0x12) == VCPValue(current: 50, maximum: 50))
+        #expect(try DDCPacket.parseGetVCPReply(g81, vcp: 0x12) == VCPValue(current: 45, maximum: 50))
+    }
+
     @Test func getRequestForBrightness() {
         #expect(DDCPacket.getVCPRequest(0x10) == [0x82, 0x01, 0x10, 0xAC])
     }
