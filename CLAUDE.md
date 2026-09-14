@@ -40,7 +40,8 @@ scripts/install.sh               Release build → /Applications
 - **Logic goes in LumenCore with tests first.** The app target stays thin. Test hardware
   behaviour through `FakeBackend`, which mimics the real quirks below.
 - **Never leave the Mac without a display.** Every disconnect goes through `SafetyRules`
-  at the moment it runs, not only at planning time.
+  at the moment it runs, not only at planning time. Quitting reconnects anything Lumen
+  switched off (`AppDelegate.applicationShouldTerminate`); keep that path working.
 - UK English in user-facing copy.
 - **Liquid Glass comes from the system chrome** (popover, Settings toolbar). Never put
   `.glass` buttons inside the popover: it is already a glass surface and glass must not stack.
