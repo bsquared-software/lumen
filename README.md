@@ -39,7 +39,7 @@ record new shortcuts or add presets in **Settings › Presets**. **Update from C
 copies how your displays are set up right now into a preset.
 
 Lumen never switches off the last display that is on. If a monitor won't come back, use
-**Reconnect All**, or unplug and replug its cable. Logging out also brings every display back.
+**Reconnect All**, or unplug and replug its cable.
 
 ## How it works
 
