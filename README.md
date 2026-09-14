@@ -26,20 +26,41 @@ two apps don't fight over the same displays.
 
 ## Using it
 
-Click the sun in the menu bar. Each display gets a card with an on/off switch, a brightness
-slider and resolution menus. Presets sit at the top.
+Click Lumen's icon in the menu bar: a sun, or the icon of the preset you applied last. Each
+display gets a card, left to right as your displays are arranged, with an on/off switch,
+brightness and contrast sliders (contrast where the monitor supports it) and resolution menus.
+Presets sit at the top. Launching Lumen again from Spotlight opens Settings.
 
 | Shortcut | Preset |
 |---|---|
 | ⌃⌥⌘N | Night: external monitors off, built-in display at 10% |
 | ⌃⌥⌘D | Day: everything on, built-in display at the brightness it had on first launch |
 
-Night and Day are created from the displays attached the first time Lumen runs. Edit them,
-record new shortcuts or add presets in **Settings › Presets**. **Update from Current Setup**
-copies how your displays are set up right now into a preset.
+Night and Day are created from the displays attached the first time Lumen runs.
+
+- **Save a preset** from the popover's save button, or with **+** in **Settings › Presets**.
+  **Update from Current Setup** copies how your displays are set up right now into a preset,
+  keeping displays that aren't plugged in.
+- **Edit presets** in Settings: name, icon, shortcut, and what each display should do. Drag
+  presets to change their order in the popover.
+- **Rename displays** in **Settings › Displays**, e.g. "Left OLED" instead of "Odyssey G81SF".
+- Resolution menus show the sizes worth picking, like System Settings does. The mode in use
+  always stays listed.
 
 Lumen never switches off the last display that is on. If a monitor won't come back, use
 **Reconnect All**, or unplug and replug its cable.
+
+## Preset links
+
+Every preset has a link, shown and copyable in Settings:
+
+```sh
+open "lumen://apply/Night"
+open "lumen://apply/Night%20Mode"   # names with spaces are URL-encoded
+```
+
+Use them from Shortcuts (Open URLs), Raycast, a Stream Deck, or a scheduled job to switch
+presets at set times. Names match without regard to case.
 
 ## How it works
 
@@ -51,6 +72,7 @@ macOS update can break a feature until Lumen is updated:
 | On / off | `CGSConfigureDisplayEnabled` (SkyLight) |
 | Built-in brightness | `DisplayServicesSetBrightness` |
 | Monitor brightness | DDC/CI over `IOAVService` (`DCPAVServiceProxy`) |
+| Monitor contrast | DDC/CI over `IOAVService` |
 | Resolution | `CGConfigureDisplayWithDisplayMode` (public) |
 | Shortcuts | Carbon `RegisterEventHotKey` (public, no Accessibility permission) |
 
