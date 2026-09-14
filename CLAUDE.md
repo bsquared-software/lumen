@@ -45,6 +45,10 @@ scripts/install.sh               Release build → /Applications
 - UK English in user-facing copy.
 - **Liquid Glass comes from the system chrome** (popover, Settings toolbar). Never put
   `.glass` buttons inside the popover: it is already a glass surface and glass must not stack.
+- **Follow `docs/design-standards.md`** (Apple HIG for macOS 26/27, checked 2026-09-14) for any
+  new UI: verb-first title-case buttons with "…" when they open a window, sentence-case tooltips
+  under 75 characters, no icons on action menu items, mini switches in forms, VoiceOver labels
+  that name the display, and meaning never carried by colour alone.
 - Settings files evolve by **adding optional fields** so older `state.json` files keep loading;
   `StateStoreTests` has a v1 fixture for this.
 

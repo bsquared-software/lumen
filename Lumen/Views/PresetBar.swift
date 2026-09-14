@@ -24,6 +24,7 @@ struct PresetBar: View {
 }
 
 private struct PresetButton: View {
+    @Environment(\.accessibilityDifferentiateWithoutColor) private var differentiateWithoutColor
     let preset: Preset
     /// 1–9: pressing the number while the popover is open applies the preset.
     let number: Int?
@@ -35,6 +36,10 @@ private struct PresetButton: View {
         let button = Button(action: action) {
             HStack(spacing: 4) {
                 Label(preset.name, systemImage: preset.symbol)
+                if isActive, differentiateWithoutColor {
+                    Image(systemName: "checkmark")
+                        .accessibilityHidden(true)
+                }
                 if shortcutProblem != nil {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .symbolRenderingMode(.multicolor)
@@ -55,10 +60,11 @@ private struct PresetButton: View {
         }
     }
 
+    /// Tooltips start with a verb and stay short; the shortcut problem gets its own sentence.
     private var helpText: String {
-        let key = number.map { " Press \($0)." } ?? ""
-        if let shortcutProblem { return "\(preset.name). \(shortcutProblem)\(key)" }
-        return (preset.hotkey.map { "\(preset.name) (\($0.displayString))." } ?? "\(preset.name).") + key
+        let keys = [preset.hotkey?.displayString, number.map { "press \($0)" }].compactMap { $0 }
+        let base = "Apply \(preset.name)" + (keys.isEmpty ? "" : " (\(keys.joined(separator: " or ")))")
+        return shortcutProblem.map { "\(base). \($0)" } ?? base
     }
 }
 

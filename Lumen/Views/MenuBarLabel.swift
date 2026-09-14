@@ -9,6 +9,8 @@ struct MenuBarLabel: View {
 
     var body: some View {
         Image(systemName: controller.menuBarSymbol)
+            // A preset changes the icon rarely, so a replace transition marks it without noise.
+            .contentTransition(.symbolEffect(.replace))
             .accessibilityLabel("Lumen")
             .onChange(of: controller.settingsRequest) {
                 NSApplication.shared.activate()

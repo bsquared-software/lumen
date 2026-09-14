@@ -12,19 +12,22 @@ struct PresetsSettingsView: View {
                 ForEach(controller.presets) { preset in
                     PresetRow(preset: preset)
                         .tag(preset.id)
+                        // Actions, so no icons (macOS 27 hides them anyway), and unavailable
+                        // items are hidden rather than dimmed.
                         .contextMenu {
-                            Button("Apply", systemImage: "play") {
-                                Task { await controller.apply(preset) }
+                            if !controller.isBusy {
+                                Button("Apply") {
+                                    Task { await controller.apply(preset) }
+                                }
                             }
-                            .disabled(controller.isBusy)
-                            Button("Duplicate", systemImage: "plus.square.on.square") {
+                            Button("Duplicate") {
                                 selection = controller.duplicate(preset.id)?.id
                             }
-                            Button("Copy Link", systemImage: "link") {
+                            Button("Copy Link") {
                                 controller.copyLink(for: preset)
                             }
                             Divider()
-                            Button("Delete…", systemImage: "trash", role: .destructive) {
+                            Button("Delete…", role: .destructive) {
                                 pendingDeletion = preset
                             }
                         }
@@ -42,12 +45,12 @@ struct PresetsSettingsView: View {
                     Button("Add Preset from Current Setup", systemImage: "plus") {
                         selection = controller.saveCurrentAsPreset().id
                     }
-                    .help("Add Preset from Current Setup")
-                    Button("Delete Preset", systemImage: "minus") {
+                    .help("Add a preset from your current setup")
+                    Button("Delete Preset…", systemImage: "minus") {
                         pendingDeletion = controller.presets.first { $0.id == selection }
                     }
                     .disabled(selection == nil)
-                    .help("Delete Preset")
+                    .help("Delete the selected preset")
                     Spacer()
                 }
                 .buttonStyle(.borderless)
@@ -60,10 +63,15 @@ struct PresetsSettingsView: View {
                 PresetEditor(preset: preset, startRenaming: controller.presetToEdit == selection)
                     .id(selection)
             } else {
-                ContentUnavailableView(
-                    "No Preset Selected", systemImage: "square.stack",
-                    description: Text("Pick a preset, or add one from how your displays are set up right now.")
-                )
+                ContentUnavailableView {
+                    Label("No Preset Selected", systemImage: "square.stack")
+                } description: {
+                    Text("Pick a preset, or save how your displays are set up right now.")
+                } actions: {
+                    Button("Add Preset from Current Setup") {
+                        selection = controller.saveCurrentAsPreset().id
+                    }
+                }
             }
         }
         .onAppear { selection = controller.presetToEdit ?? selection ?? controller.presets.first?.id }
@@ -75,7 +83,9 @@ struct PresetsSettingsView: View {
             isPresented: Binding(get: { pendingDeletion != nil }, set: { if !$0 { pendingDeletion = nil } }),
             presenting: pendingDeletion
         ) { preset in
-            Button("Delete", role: .destructive) {
+            // Apple's alert guidance: an action the person deliberately chose (they picked
+            // Delete…) isn't given the destructive style.
+            Button("Delete") {
                 controller.delete(preset.id)
                 if selection == preset.id { selection = controller.presets.first?.id }
             }
@@ -136,13 +146,17 @@ private struct PresetEditor: View {
                     TextField("Name", text: $draft.name)
                         .focused($isNameFocused)
                     if let problem = PresetFactory.nameProblem(draft.name, for: draft.id, in: controller.presets) {
-                        Text(problem)
+                        Label(problem, systemImage: "exclamationmark.triangle")
                             .font(.caption)
                             .foregroundStyle(.orange)
                     }
                 }
                 Picker("Icon", selection: $draft.symbol) {
-                    ForEach(Self.symbols, id: \.symbol) { Label($0.name, systemImage: $0.symbol).tag($0.symbol) }
+                    ForEach(Self.symbols, id: \.symbol) {
+                        Label($0.name, systemImage: $0.symbol)
+                            .labelStyle(.titleAndIcon)
+                            .tag($0.symbol)
+                    }
                 }
                 LabeledContent("Shortcut") {
                     VStack(alignment: .trailing, spacing: 4) {
@@ -150,7 +164,7 @@ private struct PresetEditor: View {
                             recording ? controller.suspendHotkeys() : controller.resumeHotkeys()
                         }
                         if let problem = controller.hotkeyProblems[draft.id] {
-                            Text(problem)
+                            Label(problem, systemImage: "exclamationmark.triangle")
                                 .font(.caption)
                                 .foregroundStyle(.red)
                         }
@@ -168,7 +182,7 @@ private struct PresetEditor: View {
                         }
                         .labelStyle(.iconOnly)
                         .buttonStyle(.borderless)
-                        .help("Copy Link. Open it from Shortcuts, Raycast or Terminal to apply this preset.")
+                        .help("Copy this preset’s link for Shortcuts, Raycast or Terminal")
                     }
                 }
             }
@@ -216,7 +230,7 @@ private struct PresetEditor: View {
                         controller.updateFromCurrentSetup(draft.id)
                         if let saved = controller.presets.first(where: { $0.id == draft.id }) { draft = saved }
                     }
-                    .help("Replace this preset’s display settings with how your displays are set up right now.")
+                    .help("Replace these display settings with your current setup")
                     Spacer()
                     if controller.isBusy, let activity = controller.activity {
                         Text(activity)
@@ -276,6 +290,7 @@ private struct TargetEditor: View {
 
     var body: some View {
         Toggle("Switched on", isOn: $target.connected)
+            .controlSize(.mini)
             .accessibilityLabel("\(displayName) switched on")
 
         if target.connected {
@@ -283,6 +298,7 @@ private struct TargetEditor: View {
                 get: { target.brightness != nil },
                 set: { target.brightness = $0 ? detail?.brightness ?? 0.5 : nil }
             ))
+            .controlSize(.mini)
             .accessibilityLabel("Set brightness for \(displayName)")
             if let brightness = target.brightness {
                 LabeledContent("Brightness") {

@@ -50,7 +50,7 @@ struct MenuContent: View {
                     .labelStyle(.iconOnly)
                     .buttonStyle(.borderless)
                     .foregroundStyle(.secondary)
-                    .help("Dismiss")
+                    .help("Dismiss these messages")
                 }
             }
 
@@ -64,11 +64,12 @@ struct MenuContent: View {
 
                 Spacer()
 
-                Button("Save Current Setup as Preset", systemImage: "plus.rectangle.on.rectangle") {
+                // Opens Settings to name the new preset, hence the ellipsis.
+                Button("Save Current Setup as Preset…", systemImage: "plus.rectangle.on.rectangle") {
                     controller.saveCurrentSetupAndEdit()
                 }
                 .labelStyle(.iconOnly)
-                .help("Save Current Setup as Preset")
+                .help("Save how your displays are set up now as a preset")
 
                 Button("Settings…", systemImage: "gearshape") {
                     NSApplication.shared.activate()
@@ -76,14 +77,14 @@ struct MenuContent: View {
                 }
                 .labelStyle(.iconOnly)
                 .keyboardShortcut(",", modifiers: .command)
-                .help("Settings (⌘,)")
+                .help("Open settings (⌘,)")
 
                 Button("Quit Lumen", systemImage: "power") {
                     NSApplication.shared.terminate(nil)
                 }
                 .labelStyle(.iconOnly)
                 .keyboardShortcut("q", modifiers: .command)
-                .help(controller.hasDisconnectedDisplays ? "Quit Lumen (⌘Q). Switched-off displays come back on first." : "Quit Lumen (⌘Q)")
+                .help(controller.hasDisconnectedDisplays ? "Quit Lumen and switch displays back on (⌘Q)" : "Quit Lumen (⌘Q)")
             }
             .buttonStyle(.borderless)
         }

@@ -2,6 +2,7 @@ import AppKit
 import SwiftUI
 
 struct GeneralSettingsView: View {
+    @AppStorage(MenuBarPreference.key) private var showsMenuBarExtra = true
     @State private var isEnabled = LoginItem.isEnabled
     @State private var needsApproval = LoginItem.needsApproval
     @State private var problem: String?
@@ -13,21 +14,26 @@ struct GeneralSettingsView: View {
                     get: { isEnabled },
                     set: { setLaunchAtLogin($0) }
                 ))
+                .controlSize(.mini)
                 if needsApproval {
                     LabeledContent("Lumen needs your approval in Login Items.") {
-                        Button("Open Login Items") { LoginItem.openSystemSettings() }
+                        Button("Open Login Items…") { LoginItem.openSystemSettings() }
                     }
                 }
                 if let problem {
-                    Text(problem)
+                    Label(problem, systemImage: "xmark.octagon")
                         .font(.caption)
                         .foregroundStyle(.red)
                 }
+                Toggle("Show Lumen in menu bar", isOn: $showsMenuBarExtra)
+                    .controlSize(.mini)
+            } footer: {
+                Text("With the menu bar icon hidden, shortcuts and links keep working. Open Lumen again from Spotlight to get back here.")
             }
 
             Section("About") {
                 LabeledContent("Version", value: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "–")
-                LabeledContent("Lumen has no app menu, so its About window lives here.") {
+                LabeledContent("Credits and version details") {
                     Button("About Lumen") {
                         NSApplication.shared.activate()
                         NSApplication.shared.orderFrontStandardAboutPanel(nil)

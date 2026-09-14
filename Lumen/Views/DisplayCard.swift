@@ -35,7 +35,7 @@ struct DisplayCard: View {
                     .toggleStyle(.switch)
                     .labelsHidden()
                     .disabled(controller.isBusy)
-                    .help(isOn ? "Switch Off \(detail.known.displayName)" : "Switch On \(detail.known.displayName)")
+                    .help(isOn ? "Switch off \(detail.known.displayName)" : "Switch on \(detail.known.displayName)")
                 }
 
                 if isOn {
@@ -108,7 +108,8 @@ private struct AdjustmentSlider: View {
                 .frame(minWidth: 36, alignment: .trailing)
                 .accessibilityHidden(true)
         }
-        .help(label)
+        // Sliders show their value in a tooltip.
+        .help("Adjust \(label.lowercased()) (\((draft ?? value).formatted(.percent.precision(.fractionLength(0)))))")
     }
 }
 
