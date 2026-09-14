@@ -29,7 +29,12 @@ two apps don't fight over the same displays.
 Click Lumen's icon in the menu bar: a sun, or the icon of the preset you applied last. Each
 display gets a card, left to right as your displays are arranged, with an on/off switch,
 brightness and contrast sliders (contrast where the monitor supports it) and resolution menus.
-Presets sit at the top. Launching Lumen again from Spotlight opens Settings.
+Presets sit at the top: click one, or press its number (1–9) while the popover is open. ⌘,
+opens Settings and ⌘Q quits. Launching Lumen again from Spotlight opens Settings.
+
+The first time you open the popover, Lumen offers to open at login. Say yes: if Lumen isn't
+running after a restart, its shortcuts do nothing. Quitting Lumen switches back on any display
+it switched off, so monitors never stay dark without a way back.
 
 | Shortcut | Preset |
 |---|---|
@@ -41,9 +46,13 @@ Night and Day are created from the displays attached the first time Lumen runs.
 - **Save a preset** from the popover's save button, or with **+** in **Settings › Presets**.
   **Update from Current Setup** copies how your displays are set up right now into a preset,
   keeping displays that aren't plugged in.
-- **Edit presets** in Settings: name, icon, shortcut, and what each display should do. Drag
-  presets to change their order in the popover.
-- **Rename displays** in **Settings › Displays**, e.g. "Left OLED" instead of "Odyssey G81SF".
+- **Edit presets** in Settings: name, icon, shortcut, and what each display should do. Add
+  displays the preset doesn't cover yet, or remove ones you no longer own. Drag presets to
+  change their order in the popover, and right-click one to apply, duplicate, copy its link or
+  delete it.
+- **Rename displays** in **Settings › Displays**, e.g. "Left OLED" instead of "Odyssey G81SF",
+  and forget displays you won't plug in again.
+- Applying a preset while undocked quietly skips the monitors that aren't there.
 - Resolution menus show the sizes worth picking, like System Settings does. The mode in use
   always stays listed.
 
@@ -57,10 +66,12 @@ Every preset has a link, shown and copyable in Settings:
 ```sh
 open "lumen://apply/Night"
 open "lumen://apply/Night%20Mode"   # names with spaces are URL-encoded
+open "lumen://reconnect-all"        # switch every display Lumen turned off back on
 ```
 
 Use them from Shortcuts (Open URLs), Raycast, a Stream Deck, or a scheduled job to switch
-presets at set times. Names match without regard to case.
+presets at set times. Names match without regard to case; Settings warns when two presets share
+a name.
 
 ## How it works
 

@@ -27,6 +27,13 @@ hotkey. The morning routine is the reverse.
 **Not in v1:** schedules / sunset triggers, custom resolutions macOS does not offer
 (BetterDisplay's virtual-display HiDPI trick), a CLI, colour profiles, rotation.
 
+**Added after v1 (2026-09-14, two quick-win passes):** `lumen://apply/<preset>` and
+`lumen://reconnect-all` links (the answer to scheduling: Shortcuts or `open` from a scheduled
+job), display renaming and forgetting, DDC contrast, desk-order cards, a first-run
+open-at-login offer, reconnect-on-quit, preset duplication and display add/remove, a shorter
+resolution list, the active preset surviving a relaunch, and popover keyboard shortcuts.
+Still out: in-app schedules, Night Shift / True Tone in presets, contrast in presets.
+
 ## Hardware (verified 2026-09-14, macOS 27.0)
 
 | Display | CG id | Vendor / model / serial | Port | DDC brightness |
