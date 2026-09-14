@@ -70,13 +70,3 @@ import Testing
         #expect(AVServiceMatcher.port(for: display, among: framebuffers) == nil)
     }
 }
-
-extension DisplayInfo {
-    static func fixture(
-        uuid: String, name: String, displayID: UInt32, vendor: UInt32, model: UInt32, serial: UInt32,
-        isBuiltin: Bool = false, isActive: Bool = true
-    ) -> DisplayInfo {
-        DisplayInfo(uuid: uuid, displayID: displayID, name: name, vendor: vendor, model: model,
-                    serial: serial, isBuiltin: isBuiltin, isActive: isActive)
-    }
-}
