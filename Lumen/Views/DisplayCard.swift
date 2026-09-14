@@ -16,6 +16,7 @@ struct DisplayCard: View {
                         .font(.title2)
                         .foregroundStyle(isOn ? .primary : .secondary)
                         .frame(width: 30)
+                        .accessibilityHidden(true)
 
                     VStack(alignment: .leading, spacing: 2) {
                         Text(detail.known.displayName)
@@ -27,23 +28,24 @@ struct DisplayCard: View {
 
                     Spacer()
 
-                    Toggle("Switched on", isOn: Binding(
+                    Toggle(detail.known.displayName, isOn: Binding(
                         get: { isOn },
                         set: { on in Task { await controller.setConnected(on, detail.id) } }
                     ))
                     .toggleStyle(.switch)
                     .labelsHidden()
                     .disabled(controller.isBusy)
+                    .help(isOn ? "Switch Off \(detail.known.displayName)" : "Switch On \(detail.known.displayName)")
                 }
 
                 if isOn {
                     if let brightness = detail.brightness {
-                        AdjustmentSlider(label: "Brightness", value: brightness, lowSymbol: "sun.min", highSymbol: "sun.max") {
+                        AdjustmentSlider(label: "Brightness", display: detail.known.displayName, value: brightness, lowSymbol: "sun.min", highSymbol: "sun.max") {
                             controller.setBrightness($0, for: detail.id)
                         }
                     }
                     if let contrast = detail.contrast {
-                        AdjustmentSlider(label: "Contrast", value: contrast, lowSymbol: "circle.lefthalf.filled", highSymbol: "circle.righthalf.filled") {
+                        AdjustmentSlider(label: "Contrast", display: detail.known.displayName, value: contrast, lowSymbol: "circle.lefthalf.filled", highSymbol: "circle.righthalf.filled") {
                             controller.setContrast($0, for: detail.id)
                         }
                     }
@@ -57,6 +59,9 @@ struct DisplayCard: View {
             }
             .padding(4)
         }
+        // VoiceOver reads each card as one display with its controls inside.
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(detail.known.displayName)
     }
 
     private var subtitle: String {
@@ -67,6 +72,7 @@ struct DisplayCard: View {
 
 private struct AdjustmentSlider: View {
     let label: String
+    let display: String
     let value: Double
     let lowSymbol: String
     let highSymbol: String
@@ -81,6 +87,7 @@ private struct AdjustmentSlider: View {
             Image(systemName: lowSymbol)
                 .foregroundStyle(.secondary)
                 .frame(width: 16)
+                .accessibilityHidden(true)
             Slider(
                 value: Binding(get: { shown }, set: { draft = $0; onChange($0) }),
                 in: 0...1
@@ -90,13 +97,17 @@ private struct AdjustmentSlider: View {
                 if !editing { draft = nil }
             }
             .labelsHidden()
+            .accessibilityLabel("\(label), \(display)")
+            .accessibilityValue(Text(shown, format: .percent.precision(.fractionLength(0))))
             Image(systemName: highSymbol)
                 .foregroundStyle(.secondary)
                 .frame(width: 16)
+                .accessibilityHidden(true)
             Text(shown, format: .percent.precision(.fractionLength(0)))
                 .font(.caption)
                 .monospacedDigit()
-                .frame(width: 36, alignment: .trailing)
+                .frame(minWidth: 36, alignment: .trailing)
+                .accessibilityHidden(true)
         }
         .help(label)
     }
@@ -144,5 +155,7 @@ private struct ModePickers: View {
         .labelsHidden()
         .pickerStyle(.menu)
         .disabled(controller.isBusy)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Display mode, \(detail.known.displayName)")
     }
 }

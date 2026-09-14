@@ -40,6 +40,7 @@ struct MenuContent: View {
                             Label(notice, systemImage: "exclamationmark.triangle")
                                 .font(.callout)
                                 .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
                     }
                     Spacer(minLength: 0)

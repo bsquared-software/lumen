@@ -46,6 +46,8 @@ private struct PresetButton: View {
         .controlSize(.large)
         .presetNumberKey(number)
         .help(helpText)
+        .accessibilityAddTraits(isActive ? .isSelected : [])
+        .accessibilityHint(preset.hotkey.map { "Shortcut \($0.displayString)" } ?? "")
 
         if isActive {
             button.buttonStyle(.borderedProminent)
