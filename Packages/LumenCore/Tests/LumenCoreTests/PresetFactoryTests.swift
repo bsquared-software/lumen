@@ -46,4 +46,29 @@ import Testing
             DisplayTarget(uuid: "LS32", name: "LS32D70xE", connected: false),
         ])
     }
+
+    @Test func updatingFromCurrentSetupKeepsMonitorsThatAreUnpluggedNow() {
+        let captured = [
+            CapturedDisplay(display: Desk.known(Desk.builtin, .online), brightness: 0.3, mode: nil),
+            CapturedDisplay(display: Desk.known(Desk.g81, .unavailable), brightness: nil, mode: nil),
+        ]
+        let updated = PresetFactory.updating(Desk.day, from: captured)
+        #expect(updated.name == "Day")
+        #expect(updated.displays == [
+            DisplayTarget(uuid: "G81", name: "Odyssey G81SF", connected: true, mode: Desk.hiDPI1440),
+            DisplayTarget(uuid: "LS32", name: "LS32D70xE", connected: true),
+            DisplayTarget(uuid: "BUILTIN", name: "Built-in Display", connected: true, brightness: 0.3),
+        ])
+    }
+
+    @Test func updatingFromCurrentSetupAddsNewlyAttachedDisplays() {
+        let preset = Preset(name: "Laptop", symbol: "laptopcomputer", displays: [
+            DisplayTarget(uuid: "BUILTIN", name: "Built-in Display", connected: true),
+        ])
+        let captured = [
+            CapturedDisplay(display: Desk.known(Desk.builtin, .online), brightness: nil, mode: nil),
+            CapturedDisplay(display: Desk.known(Desk.ls32, .disconnected), brightness: nil, mode: nil),
+        ]
+        #expect(PresetFactory.updating(preset, from: captured).displays.map(\.uuid) == ["BUILTIN", "LS32"])
+    }
 }

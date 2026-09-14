@@ -1,14 +1,16 @@
 /// Merges what CoreGraphics reports now with what Lumen remembers.
 ///
-/// A display Lumen disconnected may vanish from CoreGraphics entirely, so the saved record is
-/// the only way to show it and switch it back on.
+/// A display Lumen switched off vanishes from CoreGraphics entirely, so the saved record is the
+/// only way to show it and switch it back on.
 public enum DisplayRegistry {
-    public static func merge(records: [DisplayRecord], online: [DisplayInfo]) -> [DisplayRecord] {
+    /// - Parameter keepingFlagsFor: displays being switched off right now. They may still be
+    ///   listed for a moment, and must not lose their flag while they are.
+    public static func merge(records: [DisplayRecord], online: [DisplayInfo], keepingFlagsFor switchingOff: Set<String> = []) -> [DisplayRecord] {
         var merged = records
         for info in online {
             if let index = merged.firstIndex(where: { $0.id == info.uuid }) {
                 merged[index].info = info
-                if info.isActive { merged[index].disconnectedByLumen = false }
+                if !switchingOff.contains(info.uuid) { merged[index].disconnectedByLumen = false }
             } else {
                 merged.append(DisplayRecord(info: info, disconnectedByLumen: false))
             }
@@ -17,13 +19,22 @@ public enum DisplayRegistry {
     }
 
     /// Every remembered display with its status, built-in first.
-    public static func knownDisplays(records: [DisplayRecord], online: [DisplayInfo]) -> [KnownDisplay] {
+    public static func knownDisplays(
+        records: [DisplayRecord], online: [DisplayInfo], framebuffers: [FramebufferAttributes],
+        switchingOff: Set<String> = []
+    ) -> [KnownDisplay] {
         let onlineByID = Dictionary(online.map { ($0.uuid, $0) }, uniquingKeysWith: { first, _ in first })
-        let known = merge(records: records, online: online).map { record in
-            let current = onlineByID[record.id]
-            return KnownDisplay(info: current ?? record.info, status: DisplayStatus.resolve(record: record, online: current))
+        let known = merge(records: records, online: online, keepingFlagsFor: switchingOff).map { record in
+            let current = switchingOff.contains(record.id) ? nil : onlineByID[record.id]
+            let status = DisplayStatus.resolve(record: record, online: current, isAttached: isAttached(record.info, framebuffers: framebuffers))
+            return KnownDisplay(info: current ?? record.info, status: status)
         }
         return known.filter(\.info.isBuiltin) + known.filter { !$0.info.isBuiltin }
+    }
+
+    public static func isAttached(_ info: DisplayInfo, framebuffers: [FramebufferAttributes]) -> Bool {
+        if info.isBuiltin { return framebuffers.contains { $0.port == "disp0" } }
+        return AVServiceMatcher.port(for: info, among: framebuffers) != nil
     }
 
     public static func setDisconnectedByLumen(_ flag: Bool, uuid: String, in records: [DisplayRecord]) -> [DisplayRecord] {

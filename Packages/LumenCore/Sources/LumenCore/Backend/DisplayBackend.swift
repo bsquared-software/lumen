@@ -24,6 +24,9 @@ public enum DisplayError: Error, Equatable, Sendable, LocalizedError {
 /// implementation that touches private APIs; tests use fakes.
 public protocol DisplayBackend: Sendable {
     func onlineDisplays() -> [DisplayInfo]
+    /// Framebuffers in the IORegistry. A switched-off display keeps its entry; an unplugged one
+    /// loses it, which is how the two are told apart.
+    func attachedFramebuffers() -> [FramebufferAttributes]
     func setEnabled(_ enabled: Bool, displayID: CGDirectDisplayID) throws
     /// Normalised to `0...1`.
     func brightness(of display: DisplayInfo) throws -> Double

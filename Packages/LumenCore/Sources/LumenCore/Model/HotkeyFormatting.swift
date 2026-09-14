@@ -23,9 +23,12 @@ public enum HotkeyFormatting {
         return mapping.filter { flags & $0.cocoa != 0 }.reduce(0) { $0 | $1.carbon }
     }
 
-    /// Shift alone is too easy to trigger while typing, so a global shortcut needs ⌘, ⌃ or ⌥.
+    /// A global shortcut needs ⌃ or ⌥, or ⌘ with ⇧. Shift alone fires while typing, and ⌘ alone
+    /// would take over app shortcuts such as ⌘C everywhere.
     public static func isAcceptable(modifiers: UInt32) -> Bool {
-        modifiers & (HotkeyModifiers.command | HotkeyModifiers.control | HotkeyModifiers.option) != 0
+        if modifiers & (HotkeyModifiers.control | HotkeyModifiers.option) != 0 { return true }
+        let commandShift = HotkeyModifiers.command | HotkeyModifiers.shift
+        return modifiers & commandShift == commandShift
     }
 
     public static func keyLabel(keyCode: UInt32, characters: String?) -> String {

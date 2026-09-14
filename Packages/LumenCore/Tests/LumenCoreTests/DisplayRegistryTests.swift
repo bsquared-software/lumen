@@ -17,15 +17,15 @@ import Testing
         #expect(records.first?.info.displayID == 7)
     }
 
-    @Test func clearsTheLumenFlagWhenADisplayIsActiveAgain() {
+    @Test func clearsTheLumenFlagWhenADisplayIsOnlineAgain() {
         let records = DisplayRegistry.merge(records: [DisplayRecord(info: Desk.g81, disconnectedByLumen: true)], online: [Desk.g81])
         #expect(records.first?.disconnectedByLumen == false)
     }
 
-    @Test func keepsTheLumenFlagWhileADisplayIsOnlineButInactive() {
-        var inactive = Desk.g81
-        inactive.isActive = false
-        let records = DisplayRegistry.merge(records: [DisplayRecord(info: Desk.g81, disconnectedByLumen: true)], online: [inactive])
+    @Test func keepsTheLumenFlagForDisplaysStillBeingSwitchedOff() {
+        let records = DisplayRegistry.merge(
+            records: [DisplayRecord(info: Desk.g81, disconnectedByLumen: true)], online: [Desk.g81], keepingFlagsFor: ["G81"]
+        )
         #expect(records.first?.disconnectedByLumen == true)
     }
 
@@ -40,9 +40,21 @@ import Testing
             DisplayRecord(info: Desk.ls32, disconnectedByLumen: true),
             DisplayRecord(info: Desk.builtin, disconnectedByLumen: false),
         ]
-        let known = DisplayRegistry.knownDisplays(records: records, online: [Desk.builtin, Desk.g81])
+        let known = DisplayRegistry.knownDisplays(records: records, online: [Desk.builtin, Desk.g81], framebuffers: Desk.pluggedIn)
         #expect(known.map(\.id) == ["BUILTIN", "G81", "LS32"])
         #expect(known.map(\.status) == [.online, .online, .disconnected])
+    }
+
+    @Test func aSwitchedOffMonitorWithNoFramebufferIsUnavailable() {
+        let records = [DisplayRecord(info: Desk.builtin, disconnectedByLumen: false), DisplayRecord(info: Desk.ls32, disconnectedByLumen: true)]
+        let known = DisplayRegistry.knownDisplays(records: records, online: [Desk.builtin], framebuffers: [Desk.pluggedIn[0]])
+        #expect(known.map(\.status) == [.online, .unavailable])
+    }
+
+    @Test func aSwitchedOffBuiltinCountsAsAttachedWhileItsPanelExists() {
+        let records = [DisplayRecord(info: Desk.builtin, disconnectedByLumen: true), DisplayRecord(info: Desk.g81, disconnectedByLumen: false)]
+        let known = DisplayRegistry.knownDisplays(records: records, online: [Desk.g81], framebuffers: Desk.pluggedIn)
+        #expect(known.first?.status == .disconnected)
     }
 
     @Test func settingTheLumenFlagTouchesOnlyThatDisplay() {

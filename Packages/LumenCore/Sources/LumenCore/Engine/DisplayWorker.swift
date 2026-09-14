@@ -10,51 +10,57 @@ public struct DisplayDetail: Hashable, Sendable, Identifiable {
     public var brightness: Double?
     public var modes: [DisplayMode]
     public var currentMode: DisplayMode?
+    /// `modes` grouped for pickers, computed once per snapshot rather than on every render.
+    public let options: [ResolutionOption]
 
     public init(known: KnownDisplay, brightness: Double?, modes: [DisplayMode], currentMode: DisplayMode?) {
         self.known = known
         self.brightness = brightness
         self.modes = modes
         self.currentMode = currentMode
+        self.options = ModeCatalogue.options(from: modes)
     }
 }
 
 public struct DisplaySnapshot: Sendable {
-    /// Records merged with what is online now; persist these.
+    /// The worker's records at the time of the snapshot; persist these.
     public var records: [DisplayRecord]
     public var displays: [DisplayDetail]
 }
 
-public struct WorkerResult: Sendable {
-    public var records: [DisplayRecord]
-    public var report: RunReport
-}
-
-/// Runs every hardware operation, one at a time, off the main thread.
+/// Runs every hardware operation off the main thread and owns the display records.
 ///
 /// Backend calls block (disconnecting a display takes over a second), so the actor runs on its
-/// own serial dispatch queue rather than the shared Swift concurrency thread pool. The worker
-/// is stateless: callers pass the display records in and persist the records that come back.
+/// own serial dispatch queue rather than the shared Swift concurrency thread pool.
+///
+/// Records live here, not with callers, and are updated step by step inside the actor. Calls
+/// can still interleave while one is waiting for a display, but each sees the latest records,
+/// so overlapping changes cannot overwrite each other.
 public actor DisplayWorker {
     private let backend: any DisplayBackend
     private let onlineTimeout: Duration
     private let pollInterval: Duration
+    private var records: [DisplayRecord]
+    /// Displays switched off moments ago that CoreGraphics may still list.
+    private var switchingOff: Set<String> = []
     private let queue = DispatchSerialQueue(label: "com.bsquared.lumen.display-worker", qos: .userInitiated)
 
     public nonisolated var unownedExecutor: UnownedSerialExecutor { queue.asUnownedSerialExecutor() }
 
-    public init(backend: any DisplayBackend, onlineTimeout: Duration = .seconds(5), pollInterval: Duration = .milliseconds(250)) {
+    public init(
+        backend: any DisplayBackend, records: [DisplayRecord] = [],
+        onlineTimeout: Duration = .seconds(5), pollInterval: Duration = .milliseconds(250)
+    ) {
         self.backend = backend
+        self.records = records
         self.onlineTimeout = onlineTimeout
         self.pollInterval = pollInterval
     }
 
     // MARK: Reading
 
-    public func snapshot(records: [DisplayRecord]) -> DisplaySnapshot {
-        let online = backend.onlineDisplays()
-        let merged = DisplayRegistry.merge(records: records, online: online)
-        let displays = DisplayRegistry.knownDisplays(records: merged, online: online).map { display in
+    public func snapshot() -> DisplaySnapshot {
+        let displays = knownDisplays().map { display in
             guard display.status == .online else {
                 return DisplayDetail(known: display, brightness: nil, modes: [], currentMode: nil)
             }
@@ -66,28 +72,28 @@ public actor DisplayWorker {
                 currentMode: backend.currentMode(of: id)
             )
         }
-        return DisplaySnapshot(records: merged, displays: displays)
+        return DisplaySnapshot(records: records, displays: displays)
     }
 
     // MARK: Single changes
 
-    public func setConnected(_ connected: Bool, uuid: String, records: [DisplayRecord]) async -> WorkerResult {
-        var records = DisplayRegistry.merge(records: records, online: backend.onlineDisplays())
+    public func setConnected(_ connected: Bool, uuid: String) async -> RunReport {
         var report = RunReport()
-
         if connected {
+            guard let display = knownDisplays().first(where: { $0.id == uuid }), display.status == .disconnected else { return report }
             var unreachable = Set<String>()
-            connect(uuid, records: records, report: &report, unreachable: &unreachable)
+            connect(display.info, report: &report, unreachable: &unreachable)
             if unreachable.isEmpty {
-                let missing = await waitForOnline([uuid])
-                report.failures += missing.map { DisplayFailure(name: name(of: $0, in: records), reason: .didNotComeBack) }
+                report.failures += await waitForOnline([uuid]).map { _ in DisplayFailure(name: display.info.name, reason: .didNotComeBack) }
             }
         } else {
-            records = disconnect(uuid, records: records, report: &report)
+            await disconnect(uuid, report: &report)
         }
-        return finish(records, report)
+        _ = knownDisplays()
+        return report
     }
 
+    /// Throws so the UI can show why a monitor ignored the slider.
     public func setBrightness(_ value: Double, uuid: String) throws {
         guard let info = onlineInfo(uuid) else { return }
         try backend.setBrightness(value, of: info)
@@ -98,92 +104,102 @@ public actor DisplayWorker {
         try backend.setMode(mode, displayID: info.displayID)
     }
 
-    public func reconnectAll(records: [DisplayRecord]) async -> WorkerResult {
-        let online = backend.onlineDisplays()
-        let records = DisplayRegistry.merge(records: records, online: online)
-        let offline = DisplayRegistry.knownDisplays(records: records, online: online).filter { $0.status == .disconnected }
+    public func reconnectAll() async -> RunReport {
+        let offline = knownDisplays().filter { $0.status == .disconnected }
         var report = RunReport()
         var unreachable = Set<String>()
 
         for display in offline {
-            connect(display.id, records: records, report: &report, unreachable: &unreachable)
+            connect(display.info, report: &report, unreachable: &unreachable)
         }
         let missing = await waitForOnline(offline.map(\.id).filter { !unreachable.contains($0) })
-        report.failures += missing.map { DisplayFailure(name: name(of: $0, in: records), reason: .didNotComeBack) }
-        return finish(records, report)
+        report.failures += missing.map { DisplayFailure(name: name(of: $0), reason: .didNotComeBack) }
+        _ = knownDisplays()
+        return report
     }
 
     // MARK: Presets
 
-    public func apply(_ preset: Preset, records: [DisplayRecord]) async -> WorkerResult {
-        let online = backend.onlineDisplays()
-        var records = DisplayRegistry.merge(records: records, online: online)
-        let plan = PresetPlanner.plan(preset, displays: DisplayRegistry.knownDisplays(records: records, online: online))
+    public func apply(_ preset: Preset) async -> RunReport {
+        let plan = PresetPlanner.plan(preset, displays: knownDisplays())
         var report = RunReport(skipped: plan.skipped)
         var unreachable = Set<String>()
 
         for step in plan.steps {
             switch step {
             case .connect(let uuid):
-                connect(uuid, records: records, report: &report, unreachable: &unreachable)
+                guard let record = records.first(where: { $0.id == uuid }) else { continue }
+                connect(record.info, report: &report, unreachable: &unreachable)
 
             case .waitForOnline(let uuids):
-                let missing = await waitForOnline(uuids.filter { !unreachable.contains($0) })
-                for uuid in missing {
+                for uuid in await waitForOnline(uuids.filter { !unreachable.contains($0) }) {
                     unreachable.insert(uuid)
-                    report.failures.append(DisplayFailure(name: name(of: uuid, in: records), reason: .didNotComeBack))
+                    report.failures.append(DisplayFailure(name: name(of: uuid), reason: .didNotComeBack))
                 }
 
             case .setMode(let uuid, let mode):
                 guard !unreachable.contains(uuid) else { continue }
-                change(uuid, records: records, report: &report) { try backend.setMode(mode, displayID: $0.displayID) }
+                change(uuid, report: &report) { try backend.setMode(mode, displayID: $0.displayID) }
 
             case .setBrightness(let uuid, let value):
                 guard !unreachable.contains(uuid) else { continue }
-                change(uuid, records: records, report: &report) { try backend.setBrightness(value, of: $0) }
+                change(uuid, report: &report) { try backend.setBrightness(value, of: $0) }
 
             case .disconnect(let uuid):
-                records = disconnect(uuid, records: records, report: &report)
+                await disconnect(uuid, report: &report)
             }
         }
-        return finish(records, report)
+        _ = knownDisplays()
+        return report
     }
 
     // MARK: Steps
 
-    private func connect(_ uuid: String, records: [DisplayRecord], report: inout RunReport, unreachable: inout Set<String>) {
-        guard let record = records.first(where: { $0.id == uuid }) else { return }
-        do {
-            try backend.setEnabled(true, displayID: record.info.displayID)
-        } catch {
-            unreachable.insert(uuid)
-            report.failures.append(.backend(record.info.name, error))
-        }
-    }
-
-    /// Disconnects when it is safe. The record is flagged before the call because a
-    /// disconnected display vanishes from CoreGraphics, and un-flagged again if the call fails.
-    private func disconnect(_ uuid: String, records: [DisplayRecord], report: inout RunReport) -> [DisplayRecord] {
+    /// Merges what is online now into the records and resolves every display's status.
+    private func knownDisplays() -> [KnownDisplay] {
         let online = backend.onlineDisplays()
-        guard let info = online.first(where: { $0.uuid == uuid && $0.isActive }) else { return records }
-        guard SafetyRules.canDisconnect(uuid, in: DisplayRegistry.knownDisplays(records: records, online: online)) else {
-            report.skipped.append(.wouldLeaveNoDisplay(name: info.name))
-            return records
-        }
+        records = DisplayRegistry.merge(records: records, online: online, keepingFlagsFor: switchingOff)
+        return DisplayRegistry.knownDisplays(
+            records: records, online: online, framebuffers: backend.attachedFramebuffers(), switchingOff: switchingOff
+        )
+    }
 
+    private func connect(_ info: DisplayInfo, report: inout RunReport, unreachable: inout Set<String>) {
         do {
-            let flagged = DisplayRegistry.setDisconnectedByLumen(true, uuid: uuid, in: records)
-            try backend.setEnabled(false, displayID: info.displayID)
-            return flagged
+            try backend.setEnabled(true, displayID: info.displayID)
         } catch {
+            unreachable.insert(info.uuid)
             report.failures.append(.backend(info.name, error))
-            return records
         }
     }
 
-    private func change(_ uuid: String, records: [DisplayRecord], report: inout RunReport, _ body: (DisplayInfo) throws -> Void) {
+    /// Disconnects when it is safe to at this moment, then waits for the display to leave the
+    /// online list. The record is flagged before the call because a switched-off display
+    /// vanishes from CoreGraphics, and un-flagged if the call fails.
+    private func disconnect(_ uuid: String, report: inout RunReport) async {
+        let known = knownDisplays()
+        guard let display = known.first(where: { $0.id == uuid }), display.status == .online else { return }
+        guard SafetyRules.canDisconnect(uuid, in: known) else {
+            report.skipped.append(.wouldLeaveNoDisplay(name: display.info.name))
+            return
+        }
+
+        records = DisplayRegistry.setDisconnectedByLumen(true, uuid: uuid, in: records)
+        switchingOff.insert(uuid)
+        defer { switchingOff.remove(uuid) }
+        do {
+            try backend.setEnabled(false, displayID: display.info.displayID)
+        } catch {
+            records = DisplayRegistry.setDisconnectedByLumen(false, uuid: uuid, in: records)
+            report.failures.append(.backend(display.info.name, error))
+            return
+        }
+        await waitUntil { !$0.contains(uuid) }
+    }
+
+    private func change(_ uuid: String, report: inout RunReport, _ body: (DisplayInfo) throws -> Void) {
         guard let info = onlineInfo(uuid) else {
-            report.failures.append(DisplayFailure(name: name(of: uuid, in: records), reason: .notOnline))
+            report.failures.append(DisplayFailure(name: name(of: uuid), reason: .notOnline))
             return
         }
         do {
@@ -196,25 +212,28 @@ public actor DisplayWorker {
     /// Polls until every display is online, returning the ones that never appeared.
     private func waitForOnline(_ uuids: [String]) async -> [String] {
         guard !uuids.isEmpty else { return [] }
+        await waitUntil { online in uuids.allSatisfy(online.contains) }
+        let online = Set(backend.onlineDisplays().map(\.uuid))
+        return uuids.filter { !online.contains($0) }
+    }
+
+    /// Polls the online display UUIDs until `condition` holds, the timeout passes or the task is
+    /// cancelled.
+    private func waitUntil(_ condition: (Set<String>) -> Bool) async {
         let clock = ContinuousClock()
         let deadline = clock.now + onlineTimeout
-        while true {
-            let online = Set(backend.onlineDisplays().filter(\.isActive).map(\.uuid))
-            let missing = uuids.filter { !online.contains($0) }
-            if missing.isEmpty || clock.now >= deadline { return missing }
+        while !Task.isCancelled, clock.now < deadline {
+            if condition(Set(backend.onlineDisplays().map(\.uuid))) { return }
             try? await Task.sleep(for: pollInterval)
         }
     }
 
     private func onlineInfo(_ uuid: String) -> DisplayInfo? {
-        backend.onlineDisplays().first { $0.uuid == uuid && $0.isActive }
+        guard !switchingOff.contains(uuid) else { return nil }
+        return backend.onlineDisplays().first { $0.uuid == uuid }
     }
 
-    private func name(of uuid: String, in records: [DisplayRecord]) -> String {
+    private func name(of uuid: String) -> String {
         records.first { $0.id == uuid }?.info.name ?? "A display"
-    }
-
-    private func finish(_ records: [DisplayRecord], _ report: RunReport) -> WorkerResult {
-        WorkerResult(records: DisplayRegistry.merge(records: records, online: backend.onlineDisplays()), report: report)
     }
 }

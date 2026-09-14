@@ -22,9 +22,11 @@ public enum DisplayStatus: String, Codable, Sendable {
     /// Remembered but not attached (unplugged). Nothing Lumen can do.
     case unavailable
 
-    public static func resolve(record: DisplayRecord, online: DisplayInfo?) -> DisplayStatus {
-        if let online { return online.isActive ? .online : .disconnected }
-        return record.disconnectedByLumen ? .disconnected : .unavailable
+    /// - Parameter isAttached: whether the display's framebuffer is still in the IORegistry.
+    ///   A switched-off display keeps it (verified on hardware); an unplugged one should not.
+    public static func resolve(record: DisplayRecord, online: DisplayInfo?, isAttached: Bool) -> DisplayStatus {
+        if online != nil { return .online }
+        return record.disconnectedByLumen && isAttached ? .disconnected : .unavailable
     }
 }
 

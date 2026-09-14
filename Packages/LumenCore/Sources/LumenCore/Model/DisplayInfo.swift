@@ -14,13 +14,10 @@ public struct DisplayInfo: Codable, Hashable, Sendable, Identifiable {
     public var model: UInt32
     public var serial: UInt32
     public var isBuiltin: Bool
-    /// False when the display is online but macOS is not drawing to it (disconnected in
-    /// software).
-    public var isActive: Bool
 
     public init(
         uuid: String, displayID: CGDirectDisplayID, name: String, vendor: UInt32, model: UInt32,
-        serial: UInt32, isBuiltin: Bool, isActive: Bool
+        serial: UInt32, isBuiltin: Bool
     ) {
         self.uuid = uuid
         self.displayID = displayID
@@ -29,6 +26,5 @@ public struct DisplayInfo: Codable, Hashable, Sendable, Identifiable {
         self.model = model
         self.serial = serial
         self.isBuiltin = isBuiltin
-        self.isActive = isActive
     }
 }

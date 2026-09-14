@@ -57,4 +57,16 @@ public enum PresetFactory {
             }
         )
     }
+
+    /// "Update from Current Setup": replaces the targets for every display captured now and
+    /// keeps targets for displays that are not attached at the moment, so updating Day while
+    /// undocked does not drop the monitors. Newly attached displays are appended.
+    public static func updating(_ preset: Preset, from displays: [CapturedDisplay]) -> Preset {
+        let fresh = capture(name: preset.name, symbol: preset.symbol, displays: displays).displays
+        let freshByID = Dictionary(fresh.map { ($0.uuid, $0) }, uniquingKeysWith: { first, _ in first })
+        var updated = preset
+        updated.displays = preset.displays.map { freshByID[$0.uuid] ?? $0 }
+            + fresh.filter { target in !preset.displays.contains { $0.uuid == target.uuid } }
+        return updated
+    }
 }

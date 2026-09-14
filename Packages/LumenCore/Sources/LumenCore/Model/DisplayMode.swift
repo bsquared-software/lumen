@@ -22,8 +22,10 @@ public struct DisplayMode: Codable, Hashable, Sendable {
     public func matches(_ other: DisplayMode) -> Bool {
         width == other.width && height == other.height
             && pixelWidth == other.pixelWidth && pixelHeight == other.pixelHeight
-            && Self.rateKey(refreshRate) == Self.rateKey(other.refreshRate)
+            && Self.refreshKey(refreshRate) == Self.refreshKey(other.refreshRate)
     }
 
-    static func rateKey(_ rate: Double) -> Int { Int((rate * 100).rounded()) }
+    /// A refresh rate in hundredths of a hertz, for comparing and tagging rates without float
+    /// noise.
+    public static func refreshKey(_ rate: Double) -> Int { Int((rate * 100).rounded()) }
 }

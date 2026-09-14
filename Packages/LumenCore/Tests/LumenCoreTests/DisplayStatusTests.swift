@@ -3,23 +3,22 @@ import Testing
 
 @Suite struct DisplayStatusTests {
     static let record = DisplayRecord(info: Desk.ls32, disconnectedByLumen: false)
+    static let flagged = DisplayRecord(info: Desk.ls32, disconnectedByLumen: true)
 
-    @Test func onlineAndActiveIsOnline() {
-        #expect(DisplayStatus.resolve(record: Self.record, online: Desk.ls32) == .online)
+    @Test func onlineIsOnlineWhateverTheFlag() {
+        #expect(DisplayStatus.resolve(record: Self.flagged, online: Desk.ls32, isAttached: true) == .online)
     }
 
-    @Test func onlineButInactiveIsDisconnected() {
-        var inactive = Desk.ls32
-        inactive.isActive = false
-        #expect(DisplayStatus.resolve(record: Self.record, online: inactive) == .disconnected)
+    @Test func switchedOffByLumenAndStillPluggedInIsDisconnected() {
+        #expect(DisplayStatus.resolve(record: Self.flagged, online: nil, isAttached: true) == .disconnected)
     }
 
-    @Test func missingButDisconnectedByLumenIsDisconnected() {
-        let record = DisplayRecord(info: Desk.ls32, disconnectedByLumen: true)
-        #expect(DisplayStatus.resolve(record: record, online: nil) == .disconnected)
+    // Night, then undock: the monitor must not stay listed as "Switched off".
+    @Test func switchedOffByLumenThenUnpluggedIsUnavailable() {
+        #expect(DisplayStatus.resolve(record: Self.flagged, online: nil, isAttached: false) == .unavailable)
     }
 
     @Test func missingForAnyOtherReasonIsUnavailable() {
-        #expect(DisplayStatus.resolve(record: Self.record, online: nil) == .unavailable)
+        #expect(DisplayStatus.resolve(record: Self.record, online: nil, isAttached: true) == .unavailable)
     }
 }

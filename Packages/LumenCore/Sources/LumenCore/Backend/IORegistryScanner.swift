@@ -31,8 +31,11 @@ enum IORegistryScanner {
     static func withAVService<Result>(port: String, _ body: (UnsafeMutableRawPointer) throws -> Result) throws -> Result {
         guard let create = PrivateSymbols.avServiceCreate else { throw DisplayError.unsupported(symbol: "IOAVServiceCreateWithService") }
 
-        for service in services(matching: "DCPAVServiceProxy") {
-            defer { IOObjectRelease(service) }
+        // Release every matched service, including the ones after an early return.
+        let proxies = services(matching: "DCPAVServiceProxy")
+        defer { proxies.forEach { IOObjectRelease($0) } }
+
+        for service in proxies {
             guard property(service, "Location") as? String == "External" else { continue }
 
             var path = [CChar](repeating: 0, count: 1024)

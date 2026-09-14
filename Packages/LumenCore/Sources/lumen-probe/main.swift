@@ -24,7 +24,7 @@ func describe(_ displays: [DisplayInfo]) {
         let brightness = (try? backend.brightness(of: display)).map { String(format: "%.0f%%", $0 * 100) } ?? "n/a"
         let mode = backend.currentMode(of: display.displayID)
             .map { "\($0.width)x\($0.height)\($0.isHiDPI ? " HiDPI" : "") @ \(ModeCatalogue.refreshLabel($0.refreshRate))" } ?? "none"
-        print("\(display.uuid)  id=\(display.displayID)  \(display.name)  active=\(display.isActive)  builtin=\(display.isBuiltin)  brightness=\(brightness)  mode=\(mode)")
+        print("\(display.uuid)  id=\(display.displayID)  \(display.name)  builtin=\(display.isBuiltin)  brightness=\(brightness)  mode=\(mode)")
     }
 }
 

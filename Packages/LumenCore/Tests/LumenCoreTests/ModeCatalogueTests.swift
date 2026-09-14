@@ -74,4 +74,9 @@ import Testing
         #expect(ModeCatalogue.refreshLabel(59.94) == "59.94 Hz")
         #expect(ModeCatalogue.refreshLabel(0) == "Auto")
     }
+
+    @Test func refreshKeysIgnoreFloatNoise() {
+        #expect(DisplayMode.refreshKey(59.9399986) == DisplayMode.refreshKey(59.9400024))
+        #expect(DisplayMode.refreshKey(60) != DisplayMode.refreshKey(59.94))
+    }
 }

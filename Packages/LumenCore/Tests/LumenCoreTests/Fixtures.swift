@@ -3,18 +3,25 @@
 extension DisplayInfo {
     static func fixture(
         uuid: String, name: String, displayID: UInt32, vendor: UInt32 = 1, model: UInt32 = 1, serial: UInt32 = 1,
-        isBuiltin: Bool = false, isActive: Bool = true
+        isBuiltin: Bool = false
     ) -> DisplayInfo {
         DisplayInfo(uuid: uuid, displayID: displayID, name: name, vendor: vendor, model: model,
-                    serial: serial, isBuiltin: isBuiltin, isActive: isActive)
+                    serial: serial, isBuiltin: isBuiltin)
     }
 }
 
 /// Brandon's desk: the MacBook plus two Samsungs.
 enum Desk {
-    static let builtin = DisplayInfo.fixture(uuid: "BUILTIN", name: "Built-in Display", displayID: 1, isBuiltin: true)
-    static let g81 = DisplayInfo.fixture(uuid: "G81", name: "Odyssey G81SF", displayID: 2)
-    static let ls32 = DisplayInfo.fixture(uuid: "LS32", name: "LS32D70xE", displayID: 3)
+    static let builtin = DisplayInfo.fixture(uuid: "BUILTIN", name: "Built-in Display", displayID: 1, vendor: 1552, model: 41040, serial: 9, isBuiltin: true)
+    static let g81 = DisplayInfo.fixture(uuid: "G81", name: "Odyssey G81SF", displayID: 2, vendor: 19501, model: 30540, serial: 811091798)
+    static let ls32 = DisplayInfo.fixture(uuid: "LS32", name: "LS32D70xE", displayID: 3, vendor: 19501, model: 30291, serial: 809582919)
+
+    static func framebuffer(_ info: DisplayInfo, port: String) -> FramebufferAttributes {
+        FramebufferAttributes(port: port, vendor: info.vendor, model: info.model, serial: info.serial, productName: info.name)
+    }
+
+    /// What the IORegistry lists while all three are plugged in, switched on or not.
+    static let pluggedIn = [framebuffer(builtin, port: "disp0"), framebuffer(ls32, port: "dispext0"), framebuffer(g81, port: "dispext1")]
 
     static func known(_ info: DisplayInfo, _ status: DisplayStatus) -> KnownDisplay {
         KnownDisplay(info: info, status: status)

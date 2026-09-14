@@ -28,7 +28,7 @@ public final class SystemDisplayBackend: DisplayBackend {
             var info = DisplayInfo(
                 uuid: uuid, displayID: id, name: "Display \(id)",
                 vendor: CGDisplayVendorNumber(id), model: CGDisplayModelNumber(id), serial: CGDisplaySerialNumber(id),
-                isBuiltin: CGDisplayIsBuiltin(id) != 0, isActive: CGDisplayIsActive(id) != 0
+                isBuiltin: CGDisplayIsBuiltin(id) != 0
             )
             if info.isBuiltin {
                 info.name = "Built-in Display"
@@ -38,6 +38,10 @@ public final class SystemDisplayBackend: DisplayBackend {
             }
             return info
         }
+    }
+
+    public func attachedFramebuffers() -> [FramebufferAttributes] {
+        IORegistryScanner.framebufferAttributes()
     }
 
     // MARK: Connection
@@ -93,6 +97,8 @@ public final class SystemDisplayBackend: DisplayBackend {
     }
 
     public func setMode(_ mode: DisplayMode, displayID: CGDirectDisplayID) throws {
+        // Reconfiguring to the mode already in use still blanks the display for a moment.
+        if let current = currentMode(of: displayID), current.matches(mode) { return }
         guard let target = usableModes(of: displayID).first(where: { DisplayMode($0).matches(mode) }) else {
             throw DisplayError.modeUnavailable
         }

@@ -21,7 +21,7 @@ public enum ModeCatalogue {
                 var seen = Set<Int>()
                 let rates = modes.map(\.refreshRate)
                     .sorted(by: >)
-                    .filter { seen.insert(DisplayMode.rateKey($0)).inserted }
+                    .filter { seen.insert(DisplayMode.refreshKey($0)).inserted }
                 return ResolutionOption(width: key.width, height: key.height, isHiDPI: key.isHiDPI, refreshRates: rates)
             }
             .sorted { lhs, rhs in
@@ -37,7 +37,7 @@ public enum ModeCatalogue {
         modes
             .filter {
                 $0.width == option.width && $0.height == option.height && $0.isHiDPI == option.isHiDPI
-                    && DisplayMode.rateKey($0.refreshRate) == DisplayMode.rateKey(refreshRate)
+                    && DisplayMode.refreshKey($0.refreshRate) == DisplayMode.refreshKey(refreshRate)
             }
             .max { $0.pixelWidth * $0.pixelHeight < $1.pixelWidth * $1.pixelHeight }
     }
@@ -48,7 +48,7 @@ public enum ModeCatalogue {
 
     /// Keeps the current rate when the new resolution offers it, otherwise the fastest.
     public static func preferredRefreshRate(for option: ResolutionOption, current: Double?) -> Double? {
-        if let current, option.refreshRates.contains(where: { DisplayMode.rateKey($0) == DisplayMode.rateKey(current) }) {
+        if let current, option.refreshRates.contains(where: { DisplayMode.refreshKey($0) == DisplayMode.refreshKey(current) }) {
             return current
         }
         return option.refreshRates.first
@@ -56,7 +56,7 @@ public enum ModeCatalogue {
 
     public static func refreshLabel(_ rate: Double) -> String {
         guard rate > 0 else { return "Auto" }
-        let hundredths = DisplayMode.rateKey(rate)
+        let hundredths = DisplayMode.refreshKey(rate)
         let whole = hundredths / 100
         let fraction = hundredths % 100
         if fraction == 0 { return "\(whole) Hz" }

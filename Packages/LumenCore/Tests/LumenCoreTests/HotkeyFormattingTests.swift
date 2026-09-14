@@ -20,8 +20,12 @@ import Testing
         #expect(HotkeyFormatting.carbonModifiers(fromCocoa: cocoaControlShift) == HotkeyModifiers.control | HotkeyModifiers.shift)
     }
 
-    @Test func aShortcutNeedsCommandControlOrOption() {
-        #expect(HotkeyFormatting.isAcceptable(modifiers: HotkeyModifiers.command))
+    @Test func aShortcutNeedsControlOrOptionOrCommandWithShift() {
+        #expect(HotkeyFormatting.isAcceptable(modifiers: HotkeyModifiers.control))
+        #expect(HotkeyFormatting.isAcceptable(modifiers: HotkeyModifiers.option | HotkeyModifiers.command))
+        #expect(HotkeyFormatting.isAcceptable(modifiers: HotkeyModifiers.command | HotkeyModifiers.shift))
+        // ⌘ alone would take over shortcuts like ⌘C in every app.
+        #expect(!HotkeyFormatting.isAcceptable(modifiers: HotkeyModifiers.command))
         #expect(!HotkeyFormatting.isAcceptable(modifiers: HotkeyModifiers.shift))
         #expect(!HotkeyFormatting.isAcceptable(modifiers: 0))
     }
