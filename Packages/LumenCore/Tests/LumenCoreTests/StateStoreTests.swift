@@ -33,4 +33,16 @@ import Testing
         try Data("not json".utf8).write(to: store.fileURL)
         #expect(throws: (any Error).self) { try store.load() }
     }
+
+    @Test func quarantiningMovesACorruptFileAsideSoLoadingStartsFresh() throws {
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try FileManager.default.createDirectory(at: store.fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("not json".utf8).write(to: store.fileURL)
+
+        let moved = try store.quarantineCorruptFile()
+
+        #expect(try store.load() == nil)
+        #expect(moved.lastPathComponent.hasPrefix("state-unreadable-"))
+        #expect(try String(contentsOf: moved, encoding: .utf8) == "not json")
+    }
 }

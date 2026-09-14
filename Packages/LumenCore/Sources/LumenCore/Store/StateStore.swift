@@ -26,4 +26,14 @@ public struct StateStore: Sendable {
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         try encoder.encode(state).write(to: fileURL, options: .atomic)
     }
+
+    /// Renames an unreadable state file to `state-unreadable-<timestamp>.json` beside it, so
+    /// Lumen can start fresh without destroying what was there. Returns the new location.
+    @discardableResult
+    public func quarantineCorruptFile() throws -> URL {
+        let stamp = Int(Date().timeIntervalSince1970)
+        let destination = fileURL.deletingLastPathComponent().appending(path: "state-unreadable-\(stamp).json")
+        try FileManager.default.moveItem(at: fileURL, to: destination)
+        return destination
+    }
 }
