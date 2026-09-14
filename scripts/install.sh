@@ -7,7 +7,7 @@ cd "$(dirname "$0")/.."
 command -v xcodegen >/dev/null || { echo "xcodegen is required: brew install xcodegen" >&2; exit 1; }
 
 xcodegen generate --quiet
-xcodebuild -project Lumen.xcodeproj -scheme Lumen -configuration Release -derivedDataPath build -quiet build
+xcodebuild -project Lumen.xcodeproj -scheme Lumen -configuration Release -destination 'platform=macOS,arch=arm64' -derivedDataPath build -quiet build
 
 built="build/Build/Products/Release/Lumen.app"
 installed="/Applications/Lumen.app"
