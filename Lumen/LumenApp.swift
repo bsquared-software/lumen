@@ -2,36 +2,31 @@ import SwiftUI
 
 @main
 struct LumenApp: App {
-    @State private var controller: DisplayController
-
-    init() {
-        let controller = DisplayController()
-        _controller = State(initialValue: controller)
-        Task { await controller.start() }
-    }
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
     var body: some Scene {
         MenuBarExtra {
             MenuContent()
-                .environment(controller)
+                .environment(appDelegate.controller)
         } label: {
-            Image(systemName: controller.menuBarSymbol)
-                .accessibilityLabel("Lumen")
+            MenuBarLabel()
+                .environment(appDelegate.controller)
         }
         .menuBarExtraStyle(.window)
 
         Settings {
             SettingsView()
-                .environment(controller)
+                .environment(appDelegate.controller)
         }
 
         #if DEBUG
         Window("Lumen Preview", id: DebugSnapshot.previewWindowID) {
             MenuContent()
-                .environment(controller)
+                .environment(appDelegate.controller)
         }
         .windowResizability(.contentSize)
         .defaultLaunchBehavior(DebugSnapshot.isEnabled ? .presented : .suppressed)
+        .handlesExternalEvents(matching: [])
         #endif
     }
 }

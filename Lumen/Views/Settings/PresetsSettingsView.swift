@@ -1,16 +1,25 @@
+import AppKit
 import LumenCore
 import SwiftUI
 
 struct PresetsSettingsView: View {
     @Environment(DisplayController.self) private var controller
     @State private var selection: Preset.ID?
+    @State private var pendingDeletion: Preset?
 
     var body: some View {
         HStack(spacing: 0) {
             VStack(spacing: 0) {
-                List(controller.presets, selection: $selection) { preset in
-                    Label(preset.name, systemImage: preset.symbol)
-                        .tag(preset.id)
+                List(selection: $selection) {
+                    ForEach(controller.presets) { preset in
+                        Label(preset.name, systemImage: preset.symbol)
+                            .tag(preset.id)
+                    }
+                    .onMove { source, destination in
+                        var reordered = controller.presets
+                        reordered.move(fromOffsets: source, toOffset: destination)
+                        controller.reorderPresets(reordered)
+                    }
                 }
                 .listStyle(.inset)
 
@@ -18,14 +27,14 @@ struct PresetsSettingsView: View {
 
                 HStack(spacing: 4) {
                     Button("Add Preset from Current Setup", systemImage: "plus") {
-                        selection = controller.saveCurrentAsPreset(named: "New Preset").id
+                        selection = controller.saveCurrentAsPreset().id
                     }
+                    .help("Add Preset from Current Setup")
                     Button("Delete Preset", systemImage: "minus") {
-                        guard let selection else { return }
-                        controller.delete(selection)
-                        self.selection = controller.presets.first?.id
+                        pendingDeletion = controller.presets.first { $0.id == selection }
                     }
                     .disabled(selection == nil)
+                    .help("Delete Preset")
                     Spacer()
                 }
                 .buttonStyle(.borderless)
@@ -37,7 +46,7 @@ struct PresetsSettingsView: View {
             Divider()
 
             if let selection, let preset = controller.presets.first(where: { $0.id == selection }) {
-                PresetEditor(preset: preset)
+                PresetEditor(preset: preset, startRenaming: controller.presetToEdit == selection)
                     .id(selection)
             } else {
                 ContentUnavailableView(
@@ -47,16 +56,38 @@ struct PresetsSettingsView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .onAppear { selection = selection ?? controller.presets.first?.id }
+        .onAppear { selection = controller.presetToEdit ?? selection ?? controller.presets.first?.id }
+        .onChange(of: controller.presetToEdit) { _, presetID in
+            if let presetID { selection = presetID }
+        }
+        .confirmationDialog(
+            "Delete “\(pendingDeletion?.name ?? "")”?",
+            isPresented: Binding(get: { pendingDeletion != nil }, set: { if !$0 { pendingDeletion = nil } }),
+            presenting: pendingDeletion
+        ) { preset in
+            Button("Delete", role: .destructive) {
+                controller.delete(preset.id)
+                selection = controller.presets.first?.id
+            }
+        } message: { preset in
+            if let hotkey = preset.hotkey {
+                Text("Its shortcut \(hotkey.displayString) will stop working. This can’t be undone.")
+            } else {
+                Text("This can’t be undone.")
+            }
+        }
     }
 }
 
 private struct PresetEditor: View {
     @Environment(DisplayController.self) private var controller
     @State private var draft: Preset
+    @FocusState private var isNameFocused: Bool
+    private let startRenaming: Bool
 
-    init(preset: Preset) {
+    init(preset: Preset, startRenaming: Bool) {
         _draft = State(initialValue: preset)
+        self.startRenaming = startRenaming
     }
 
     static let symbols: [(symbol: String, name: String)] = [
@@ -68,6 +99,7 @@ private struct PresetEditor: View {
         Form {
             Section {
                 TextField("Name", text: $draft.name)
+                    .focused($isNameFocused)
                 Picker("Icon", selection: $draft.symbol) {
                     ForEach(Self.symbols, id: \.symbol) { Label($0.name, systemImage: $0.symbol).tag($0.symbol) }
                 }
@@ -83,11 +115,28 @@ private struct PresetEditor: View {
                         }
                     }
                 }
+                LabeledContent("Link") {
+                    HStack {
+                        Text(controller.link(for: draft).absoluteString)
+                            .textSelection(.enabled)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                        Button("Copy Link", systemImage: "doc.on.doc") {
+                            NSPasteboard.general.clearContents()
+                            NSPasteboard.general.setString(controller.link(for: draft).absoluteString, forType: .string)
+                        }
+                        .labelStyle(.iconOnly)
+                        .buttonStyle(.borderless)
+                        .help("Copy Link. Open it from Shortcuts, Raycast or Terminal to apply this preset.")
+                    }
+                }
             }
 
             ForEach($draft.displays) { $target in
-                Section(target.name) {
-                    TargetEditor(target: $target, detail: controller.displays.first { $0.id == target.uuid })
+                let detail = controller.displays.first { $0.id == target.uuid }
+                Section(detail?.known.displayName ?? target.name) {
+                    TargetEditor(target: $target, detail: detail)
                 }
             }
 
@@ -107,6 +156,11 @@ private struct PresetEditor: View {
         }
         .formStyle(.grouped)
         .onChange(of: draft) { _, updated in controller.update(updated) }
+        .onAppear {
+            guard startRenaming else { return }
+            isNameFocused = true
+            controller.didStartEditing(draft.id)
+        }
     }
 }
 
@@ -114,7 +168,9 @@ private struct TargetEditor: View {
     @Binding var target: DisplayTarget
     let detail: DisplayDetail?
 
-    private var options: [ResolutionOption] { detail?.options ?? [] }
+    private var options: [ResolutionOption] {
+        ModeCatalogue.essentialOptions(from: detail?.options ?? [], keeping: target.mode)
+    }
 
     var body: some View {
         Toggle("Switched on", isOn: $target.connected)
@@ -152,7 +208,7 @@ private struct TargetEditor: View {
             LabeledContent("Resolution") {
                 if let mode = target.mode {
                     HStack {
-                        Text(Self.summary(mode))
+                        Text(ModeCatalogue.summary(mode))
                         Button("Don’t Change") { target.mode = nil }
                     }
                 } else {
@@ -190,9 +246,5 @@ private struct TargetEditor: View {
                 }
             }
         }
-    }
-
-    static func summary(_ mode: DisplayMode) -> String {
-        "\(mode.width) × \(mode.height)\(mode.isHiDPI ? " HiDPI" : "") · \(ModeCatalogue.refreshLabel(mode.refreshRate))"
     }
 }

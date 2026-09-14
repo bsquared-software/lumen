@@ -1,7 +1,7 @@
 import LumenCore
 import SwiftUI
 
-/// One display in the popover: on/off, brightness and resolution.
+/// One display in the popover: on/off, brightness, contrast and resolution.
 struct DisplayCard: View {
     @Environment(DisplayController.self) private var controller
     let detail: DisplayDetail
@@ -18,7 +18,7 @@ struct DisplayCard: View {
                         .frame(width: 30)
 
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(detail.known.info.name)
+                        Text(detail.known.displayName)
                             .font(.headline)
                         Text(subtitle)
                             .font(.caption)
@@ -38,9 +38,16 @@ struct DisplayCard: View {
 
                 if isOn {
                     if let brightness = detail.brightness {
-                        BrightnessSlider(value: brightness) { controller.setBrightness($0, for: detail.id) }
+                        AdjustmentSlider(label: "Brightness", value: brightness, lowSymbol: "sun.min", highSymbol: "sun.max") {
+                            controller.setBrightness($0, for: detail.id)
+                        }
                     }
-                    if let problem = controller.brightnessErrors[detail.id] {
+                    if let contrast = detail.contrast {
+                        AdjustmentSlider(label: "Contrast", value: contrast, lowSymbol: "circle.lefthalf.filled", highSymbol: "circle.righthalf.filled") {
+                            controller.setContrast($0, for: detail.id)
+                        }
+                    }
+                    if let problem = controller.adjustmentErrors[detail.id] {
                         Label(problem, systemImage: "exclamationmark.triangle")
                             .font(.caption)
                             .foregroundStyle(.secondary)
@@ -54,13 +61,15 @@ struct DisplayCard: View {
 
     private var subtitle: String {
         guard isOn else { return "Switched off" }
-        guard let mode = detail.currentMode else { return "On" }
-        return "\(mode.width) × \(mode.height)\(mode.isHiDPI ? " HiDPI" : "") · \(ModeCatalogue.refreshLabel(mode.refreshRate))"
+        return detail.currentMode.map(ModeCatalogue.summary) ?? "On"
     }
 }
 
-private struct BrightnessSlider: View {
+private struct AdjustmentSlider: View {
+    let label: String
     let value: Double
+    let lowSymbol: String
+    let highSymbol: String
     let onChange: (Double) -> Void
 
     /// Holds the thumb still while dragging, even if a background refresh reports an older value.
@@ -69,24 +78,27 @@ private struct BrightnessSlider: View {
     var body: some View {
         let shown = draft ?? value
         HStack(spacing: 8) {
-            Image(systemName: "sun.min")
+            Image(systemName: lowSymbol)
                 .foregroundStyle(.secondary)
+                .frame(width: 16)
             Slider(
                 value: Binding(get: { shown }, set: { draft = $0; onChange($0) }),
                 in: 0...1
             ) {
-                Text("Brightness")
+                Text(label)
             } onEditingChanged: { editing in
                 if !editing { draft = nil }
             }
             .labelsHidden()
-            Image(systemName: "sun.max")
+            Image(systemName: highSymbol)
                 .foregroundStyle(.secondary)
+                .frame(width: 16)
             Text(shown, format: .percent.precision(.fractionLength(0)))
                 .font(.caption)
                 .monospacedDigit()
                 .frame(width: 36, alignment: .trailing)
         }
+        .help(label)
     }
 }
 
@@ -95,7 +107,7 @@ private struct ModePickers: View {
     let detail: DisplayDetail
 
     var body: some View {
-        let options = detail.options
+        let options = ModeCatalogue.essentialOptions(from: detail.options, keeping: detail.currentMode)
         let current = detail.currentMode.flatMap { ModeCatalogue.option(containing: $0, in: options) }
 
         HStack(spacing: 8) {

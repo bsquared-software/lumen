@@ -9,7 +9,11 @@ struct PresetBar: View {
         let columns = Array(repeating: GridItem(.flexible(), spacing: 8), count: min(max(controller.presets.count, 1), 3))
         LazyVGrid(columns: columns, spacing: 8) {
             ForEach(controller.presets) { preset in
-                PresetButton(preset: preset, isActive: controller.activePresetID == preset.id) {
+                PresetButton(
+                    preset: preset,
+                    isActive: controller.activePresetID == preset.id,
+                    shortcutProblem: controller.hotkeyProblems[preset.id]
+                ) {
                     Task { await controller.apply(preset) }
                 }
             }
@@ -21,20 +25,33 @@ struct PresetBar: View {
 private struct PresetButton: View {
     let preset: Preset
     let isActive: Bool
+    let shortcutProblem: String?
     let action: () -> Void
 
     var body: some View {
         let button = Button(action: action) {
-            Label(preset.name, systemImage: preset.symbol)
-                .frame(maxWidth: .infinity)
+            HStack(spacing: 4) {
+                Label(preset.name, systemImage: preset.symbol)
+                if shortcutProblem != nil {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .symbolRenderingMode(.multicolor)
+                        .accessibilityLabel("Shortcut not working")
+                }
+            }
+            .frame(maxWidth: .infinity)
         }
         .controlSize(.large)
-        .help(preset.hotkey.map { "\(preset.name) (\($0.displayString))" } ?? preset.name)
+        .help(helpText)
 
         if isActive {
             button.buttonStyle(.borderedProminent)
         } else {
             button.buttonStyle(.bordered)
         }
+    }
+
+    private var helpText: String {
+        if let shortcutProblem { return "\(preset.name). \(shortcutProblem)" }
+        return preset.hotkey.map { "\(preset.name) (\($0.displayString))" } ?? preset.name
     }
 }

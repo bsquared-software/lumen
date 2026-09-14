@@ -7,11 +7,17 @@ struct MenuContent: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack {
+            HStack(spacing: 8) {
                 Text("Presets")
                     .font(.headline)
                 Spacer()
                 if controller.isBusy {
+                    if let activity = controller.activity {
+                        Text(activity)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
                     ProgressView()
                         .controlSize(.small)
                 }
@@ -24,12 +30,22 @@ struct MenuContent: View {
             }
 
             if !controller.notices.isEmpty {
-                VStack(alignment: .leading, spacing: 4) {
-                    ForEach(controller.notices, id: \.self) { notice in
-                        Label(notice, systemImage: "exclamationmark.triangle")
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
+                HStack(alignment: .top, spacing: 6) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        ForEach(controller.notices, id: \.self) { notice in
+                            Label(notice, systemImage: "exclamationmark.triangle")
+                                .font(.callout)
+                                .foregroundStyle(.secondary)
+                        }
                     }
+                    Spacer(minLength: 0)
+                    Button("Dismiss", systemImage: "xmark.circle.fill") {
+                        controller.dismissNotices()
+                    }
+                    .labelStyle(.iconOnly)
+                    .buttonStyle(.borderless)
+                    .foregroundStyle(.secondary)
+                    .help("Dismiss")
                 }
             }
 
@@ -42,6 +58,12 @@ struct MenuContent: View {
                 .disabled(!controller.hasDisconnectedDisplays || controller.isBusy)
 
                 Spacer()
+
+                Button("Save Current Setup as Preset", systemImage: "plus.rectangle.on.rectangle") {
+                    controller.saveCurrentSetupAndEdit()
+                }
+                .labelStyle(.iconOnly)
+                .help("Save Current Setup as Preset")
 
                 Button("Settings…", systemImage: "gearshape") {
                     NSApplication.shared.activate()
@@ -70,5 +92,7 @@ struct MenuContent: View {
             }
             #endif
         }
+        // Messages describe the last action; don't greet the next visit with stale ones.
+        .onDisappear { controller.dismissNotices() }
     }
 }
