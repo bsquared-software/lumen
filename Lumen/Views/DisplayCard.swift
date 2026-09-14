@@ -92,12 +92,11 @@ private struct AdjustmentSlider: View {
                 value: Binding(get: { shown }, set: { draft = $0; onChange($0) }),
                 in: 0...1
             ) {
-                Text(label)
+                Text("\(label), \(display)")
             } onEditingChanged: { editing in
                 if !editing { draft = nil }
             }
             .labelsHidden()
-            .accessibilityLabel("\(label), \(display)")
             .accessibilityValue(Text(shown, format: .percent.precision(.fractionLength(0))))
             Image(systemName: highSymbol)
                 .foregroundStyle(.secondary)
