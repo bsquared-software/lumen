@@ -77,3 +77,5 @@ scripts/install.sh               Release build → /Applications
   buttons grey; raise the window first to check highlight states.
 - The menu bar item can hide behind the MacBook notch; it is always visible on external
   displays' menu bars.
+- Icon changes only show in Spotlight/Raycast once the installed `.app` folder's modification
+  date changes; `scripts/install.sh` touches it and re-registers with LaunchServices.

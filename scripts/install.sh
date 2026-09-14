@@ -19,5 +19,12 @@ fi
 
 rm -rf "$installed"
 ditto "$built" "$installed"
+
+# ditto keeps the build product's timestamps, and Xcode never updates the .app folder's own
+# date after the first build. Icon caches (Spotlight, Raycast, Finder) key on that date, so
+# without this they keep showing whatever icon Lumen had the first time it was installed.
+touch "$installed"
+/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$installed"
+
 open "$installed"
 echo "Installed $installed"
