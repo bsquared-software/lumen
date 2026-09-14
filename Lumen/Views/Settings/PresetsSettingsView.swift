@@ -1,4 +1,3 @@
-import AppKit
 import LumenCore
 import SwiftUI
 
@@ -8,23 +7,36 @@ struct PresetsSettingsView: View {
     @State private var pendingDeletion: Preset?
 
     var body: some View {
-        HStack(spacing: 0) {
-            VStack(spacing: 0) {
-                List(selection: $selection) {
-                    ForEach(controller.presets) { preset in
-                        Label(preset.name, systemImage: preset.symbol)
-                            .tag(preset.id)
-                    }
-                    .onMove { source, destination in
-                        var reordered = controller.presets
-                        reordered.move(fromOffsets: source, toOffset: destination)
-                        controller.reorderPresets(reordered)
-                    }
+        NavigationSplitView {
+            List(selection: $selection) {
+                ForEach(controller.presets) { preset in
+                    PresetRow(preset: preset)
+                        .tag(preset.id)
+                        .contextMenu {
+                            Button("Apply", systemImage: "play") {
+                                Task { await controller.apply(preset) }
+                            }
+                            .disabled(controller.isBusy)
+                            Button("Duplicate", systemImage: "plus.square.on.square") {
+                                selection = controller.duplicate(preset.id)?.id
+                            }
+                            Button("Copy Link", systemImage: "link") {
+                                controller.copyLink(for: preset)
+                            }
+                            Divider()
+                            Button("Delete…", systemImage: "trash", role: .destructive) {
+                                pendingDeletion = preset
+                            }
+                        }
                 }
-                .listStyle(.inset)
-
-                Divider()
-
+                .onMove { source, destination in
+                    var reordered = controller.presets
+                    reordered.move(fromOffsets: source, toOffset: destination)
+                    controller.reorderPresets(reordered)
+                }
+            }
+            .navigationSplitViewColumnWidth(min: 180, ideal: 210, max: 280)
+            .safeAreaInset(edge: .bottom, spacing: 0) {
                 HStack(spacing: 4) {
                     Button("Add Preset from Current Setup", systemImage: "plus") {
                         selection = controller.saveCurrentAsPreset().id
@@ -41,10 +53,8 @@ struct PresetsSettingsView: View {
                 .labelStyle(.iconOnly)
                 .padding(8)
             }
-            .frame(width: 200)
-
-            Divider()
-
+            .toolbar(removing: .sidebarToggle)
+        } detail: {
             if let selection, let preset = controller.presets.first(where: { $0.id == selection }) {
                 PresetEditor(preset: preset, startRenaming: controller.presetToEdit == selection)
                     .id(selection)
@@ -53,7 +63,6 @@ struct PresetsSettingsView: View {
                     "No Preset Selected", systemImage: "square.stack",
                     description: Text("Pick a preset, or add one from how your displays are set up right now.")
                 )
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
         .onAppear { selection = controller.presetToEdit ?? selection ?? controller.presets.first?.id }
@@ -67,7 +76,7 @@ struct PresetsSettingsView: View {
         ) { preset in
             Button("Delete", role: .destructive) {
                 controller.delete(preset.id)
-                selection = controller.presets.first?.id
+                if selection == preset.id { selection = controller.presets.first?.id }
             }
         } message: { preset in
             if let hotkey = preset.hotkey {
@@ -79,9 +88,27 @@ struct PresetsSettingsView: View {
     }
 }
 
+private struct PresetRow: View {
+    let preset: Preset
+
+    var body: some View {
+        HStack {
+            Label(preset.name, systemImage: preset.symbol)
+            Spacer()
+            if let hotkey = preset.hotkey {
+                Text(hotkey.displayString)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+}
+
 private struct PresetEditor: View {
     @Environment(DisplayController.self) private var controller
     @State private var draft: Preset
+    /// After Apply Now, show what happened here, not only in the popover.
+    @State private var appliedFromHere = false
     @FocusState private var isNameFocused: Bool
     private let startRenaming: Bool
 
@@ -91,15 +118,26 @@ private struct PresetEditor: View {
     }
 
     static let symbols: [(symbol: String, name: String)] = [
-        ("moon.stars", "Night"), ("sun.max", "Day"), ("display.2", "Displays"), ("laptopcomputer", "Laptop"),
-        ("gamecontroller", "Gaming"), ("film", "Film"), ("briefcase", "Work"), ("sparkles", "Focus"),
+        ("moon.stars", "Night"), ("sun.max", "Day"), ("sunrise", "Morning"), ("sunset", "Evening"),
+        ("bed.double", "Sleep"), ("display.2", "Displays"), ("laptopcomputer", "Laptop"), ("tv", "TV"),
+        ("gamecontroller", "Gaming"), ("film", "Film"), ("headphones", "Music"), ("book", "Reading"),
+        ("briefcase", "Work"), ("person.2", "Meeting"), ("cup.and.saucer", "Break"), ("sparkles", "Focus"),
     ]
 
     var body: some View {
+        let known = controller.displays.map(\.known)
+
         Form {
             Section {
-                TextField("Name", text: $draft.name)
-                    .focused($isNameFocused)
+                VStack(alignment: .leading, spacing: 4) {
+                    TextField("Name", text: $draft.name)
+                        .focused($isNameFocused)
+                    if let problem = PresetFactory.nameProblem(draft.name, for: draft.id, in: controller.presets) {
+                        Text(problem)
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                    }
+                }
                 Picker("Icon", selection: $draft.symbol) {
                     ForEach(Self.symbols, id: \.symbol) { Label($0.name, systemImage: $0.symbol).tag($0.symbol) }
                 }
@@ -123,8 +161,7 @@ private struct PresetEditor: View {
                             .lineLimit(1)
                             .truncationMode(.middle)
                         Button("Copy Link", systemImage: "doc.on.doc") {
-                            NSPasteboard.general.clearContents()
-                            NSPasteboard.general.setString(controller.link(for: draft).absoluteString, forType: .string)
+                            controller.copyLink(for: draft)
                         }
                         .labelStyle(.iconOnly)
                         .buttonStyle(.borderless)
@@ -133,17 +170,40 @@ private struct PresetEditor: View {
                 }
             }
 
-            ForEach($draft.displays) { $target in
-                let detail = controller.displays.first { $0.id == target.uuid }
-                Section(detail?.known.displayName ?? target.name) {
-                    TargetEditor(target: $target, detail: detail)
+            ForEach(PresetFactory.deskOrder(of: draft.displays, displays: known), id: \.self) { uuid in
+                if let target = binding(for: uuid) {
+                    let detail = controller.displays.first { $0.id == uuid }
+                    Section(detail?.known.displayName ?? target.wrappedValue.name) {
+                        TargetEditor(target: target, detail: detail)
+                        Button("Remove from Preset", role: .destructive) {
+                            draft = PresetFactory.removing(uuid, from: draft)
+                        }
+                        .buttonStyle(.borderless)
+                    }
+                }
+            }
+
+            let missing = PresetFactory.missingDisplays(in: draft, from: known)
+            if !missing.isEmpty {
+                Section {
+                    ForEach(missing) { display in
+                        LabeledContent(display.displayName) {
+                            Button("Add to Preset", systemImage: "plus.circle") {
+                                draft = PresetFactory.adding(display, to: draft)
+                            }
+                        }
+                    }
+                } header: {
+                    Text("Other Displays")
+                } footer: {
+                    Text("This preset leaves these displays alone until you add them.")
                 }
             }
 
             Section {
                 HStack {
                     Button("Apply Now") {
-                        Task { await controller.apply(draft) }
+                        Task { appliedFromHere = await controller.apply(draft) }
                     }
                     .disabled(controller.isBusy)
                     Button("Update from Current Setup") {
@@ -151,16 +211,50 @@ private struct PresetEditor: View {
                         if let saved = controller.presets.first(where: { $0.id == draft.id }) { draft = saved }
                     }
                     .help("Replace this preset’s display settings with how your displays are set up right now.")
+                    Spacer()
+                    if controller.isBusy, let activity = controller.activity {
+                        Text(activity)
+                            .foregroundStyle(.secondary)
+                        ProgressView()
+                            .controlSize(.small)
+                    }
+                }
+                if appliedFromHere, !controller.isBusy {
+                    if controller.notices.isEmpty {
+                        Label("Applied “\(draft.name)”.", systemImage: "checkmark.circle")
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ForEach(controller.notices, id: \.self) { notice in
+                            Label(notice, systemImage: "exclamationmark.triangle")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
                 }
             }
         }
         .formStyle(.grouped)
-        .onChange(of: draft) { _, updated in controller.update(updated) }
+        .onChange(of: draft) { _, updated in
+            controller.update(updated)
+            appliedFromHere = false
+        }
         .onAppear {
             guard startRenaming else { return }
             isNameFocused = true
             controller.didStartEditing(draft.id)
         }
+    }
+
+    /// A binding that looks the target up by UUID each time, so removing a target never leaves a
+    /// view holding a stale index.
+    private func binding(for uuid: String) -> Binding<DisplayTarget>? {
+        guard let target = draft.displays.first(where: { $0.uuid == uuid }) else { return nil }
+        return Binding(
+            get: { draft.displays.first { $0.uuid == uuid } ?? target },
+            set: { updated in
+                guard let index = draft.displays.firstIndex(where: { $0.uuid == uuid }) else { return }
+                draft.displays[index] = updated
+            }
+        )
     }
 }
 

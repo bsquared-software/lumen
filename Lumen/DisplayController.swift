@@ -24,11 +24,13 @@ final class DisplayController {
     private(set) var settingsRequest = 0
     /// A preset Settings should select and start renaming, set when one is created from the popover.
     private(set) var presetToEdit: Preset.ID?
+    /// Shown once in the popover: without opening at login, shortcuts stop working after a restart.
+    private(set) var isOfferingLoginItem = false
 
     @ObservationIgnored private let store: StateStore
     @ObservationIgnored private let worker: DisplayWorker
-    @ObservationIgnored private var brightness: BrightnessCoalescer?
-    @ObservationIgnored private var contrast: BrightnessCoalescer?
+    @ObservationIgnored private var brightness: AdjustmentCoalescer?
+    @ObservationIgnored private var contrast: AdjustmentCoalescer?
     @ObservationIgnored private let hotkeys = HotkeyCenter()
     @ObservationIgnored private var records: [DisplayRecord]
     @ObservationIgnored private var lastSaved: LumenState?
@@ -37,6 +39,7 @@ final class DisplayController {
     @ObservationIgnored private var canPersist: Bool
     /// A display change arrived during an action and still needs a refresh.
     @ObservationIgnored private var needsRefresh = false
+    @ObservationIgnored private var hasOfferedLoginItem: Bool
     @ObservationIgnored private var startup: Task<Void, Never>?
     @ObservationIgnored private var observation: Task<Void, Never>?
     @ObservationIgnored private var pendingRefresh: Task<Void, Never>?
@@ -52,17 +55,16 @@ final class DisplayController {
         self.lastSaved = loaded.state
         self.notices = loaded.notices
         self.canPersist = loaded.canPersist
-        self.brightness = BrightnessCoalescer { [weak self] uuid, value in
+        self.hasOfferedLoginItem = loaded.state?.hasOfferedLoginItem ?? false
+        self.brightness = makeCoalescer { worker, uuid, value in try await worker.setBrightness(value, uuid: uuid) }
+        self.contrast = makeCoalescer { worker, uuid, value in try await worker.setContrast(value, uuid: uuid) }
+    }
+
+    /// Slider writes, coalesced, with any failure shown on the display's card.
+    private func makeCoalescer(_ write: @escaping @Sendable (DisplayWorker, String, Double) async throws -> Void) -> AdjustmentCoalescer {
+        AdjustmentCoalescer { [weak self, worker] uuid, value in
             do {
-                try await worker.setBrightness(value, uuid: uuid)
-                await self?.setAdjustmentError(nil, for: uuid)
-            } catch {
-                await self?.setAdjustmentError(error.localizedDescription, for: uuid)
-            }
-        }
-        self.contrast = BrightnessCoalescer { [weak self] uuid, value in
-            do {
-                try await worker.setContrast(value, uuid: uuid)
+                try await write(worker, uuid, value)
                 await self?.setAdjustmentError(nil, for: uuid)
             } catch {
                 await self?.setAdjustmentError(error.localizedDescription, for: uuid)
@@ -97,6 +99,7 @@ final class DisplayController {
            !PresetPlanner.connectionsMatch(preset, displays: displays.map(\.known)) {
             activePresetID = nil
         }
+        isOfferingLoginItem = !hasOfferedLoginItem && !LoginItem.isEnabled
         persist()
         registerHotkeys()
         observeReconfiguration()
@@ -166,6 +169,44 @@ final class DisplayController {
         await refresh()
     }
 
+    func forget(_ uuid: String) async {
+        await worker.forget(uuid: uuid)
+        await refresh()
+    }
+
+    /// Waits for any running action, then switches back on every display Lumen switched off.
+    func prepareToQuit() async {
+        let deadline = ContinuousClock.now + .seconds(10)
+        while isBusy, ContinuousClock.now < deadline {
+            try? await Task.sleep(for: .milliseconds(100))
+        }
+        guard hasDisconnectedDisplays else { return }
+        await reconnectAll()
+    }
+
+    func acceptLoginItem() {
+        do {
+            try LoginItem.setEnabled(true)
+            if LoginItem.needsApproval {
+                notices = ["Allow Lumen in System Settings › General › Login Items to finish."]
+                LoginItem.openSystemSettings()
+            }
+        } catch {
+            notices = ["Lumen couldn’t add itself to Login Items: \(error.localizedDescription)"]
+        }
+        finishLoginItemOffer()
+    }
+
+    func declineLoginItem() {
+        finishLoginItemOffer()
+    }
+
+    private func finishLoginItemOffer() {
+        isOfferingLoginItem = false
+        hasOfferedLoginItem = true
+        persist()
+    }
+
     func dismissNotices() {
         guard !notices.isEmpty else { return }
         notices = []
@@ -173,9 +214,12 @@ final class DisplayController {
 
     // MARK: Presets
 
-    func apply(_ preset: Preset) async {
-        guard let report = await run("Applying \(preset.name)…", { [worker] in await worker.apply(preset) }) else { return }
+    /// Returns `false` when another action was running, so nothing happened.
+    @discardableResult
+    func apply(_ preset: Preset) async -> Bool {
+        guard let report = await run("Applying \(preset.name)…", { [worker] in await worker.apply(preset) }) else { return false }
         markActive(report.failures.isEmpty ? preset.id : nil)
+        return true
     }
 
     func apply(presetID: Preset.ID) async {
@@ -183,12 +227,14 @@ final class DisplayController {
         await apply(preset)
     }
 
-    /// Handles `lumen://apply/<preset>`.
+    /// Handles `lumen://apply/<preset>` and `lumen://reconnect-all`.
     func open(_ url: URL) async {
         await start()
-        switch PresetLink.resolve(url, in: presets) {
-        case .success(let preset):
+        switch PresetLink.action(for: url, in: presets) {
+        case .success(.apply(let preset)):
             await apply(preset)
+        case .success(.reconnectAll):
+            await reconnectAll()
         case .failure(let error):
             notices = [error.message]
         }
@@ -196,6 +242,21 @@ final class DisplayController {
 
     func link(for preset: Preset) -> URL {
         PresetLink.url(for: preset)
+    }
+
+    func copyLink(for preset: Preset) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(link(for: preset).absoluteString, forType: .string)
+    }
+
+    /// Inserts a copy after the original and returns it.
+    @discardableResult
+    func duplicate(_ presetID: Preset.ID) -> Preset? {
+        guard let index = presets.firstIndex(where: { $0.id == presetID }) else { return nil }
+        let copy = PresetFactory.duplicate(presets[index], existingNames: presets.map(\.name))
+        presets.insert(copy, at: index + 1)
+        persist()
+        return copy
     }
 
     @discardableResult
@@ -322,7 +383,9 @@ final class DisplayController {
     }
 
     private func persist() {
-        let state = LumenState(displays: records, presets: presets, activePresetID: activePresetID)
+        let state = LumenState(
+            displays: records, presets: presets, activePresetID: activePresetID, hasOfferedLoginItem: hasOfferedLoginItem ? true : nil
+        )
         guard canPersist, state != lastSaved else { return }
         do {
             try store.save(state)

@@ -12,6 +12,16 @@ struct DisplaysSettingsView: View {
                     DisplayNameField(detail: detail)
                     LabeledContent("Model", value: detail.known.info.name)
                     LabeledContent("Status", value: status(of: detail))
+                    if detail.known.status == .unavailable {
+                        LabeledContent {
+                            Button("Forget Display", role: .destructive) {
+                                Task { await controller.forget(detail.id) }
+                            }
+                        } label: {
+                            Text("Lumen learns it again if it’s plugged back in.")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
                 } header: {
                     Label(detail.known.displayName, systemImage: detail.known.info.isBuiltin ? "laptopcomputer" : "display")
                 }

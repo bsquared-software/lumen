@@ -23,6 +23,10 @@ struct MenuContent: View {
                 }
             }
 
+            if controller.isOfferingLoginItem {
+                LoginItemOffer()
+            }
+
             PresetBar()
 
             ForEach(controller.visibleDisplays) { detail in
@@ -70,13 +74,15 @@ struct MenuContent: View {
                     openSettings()
                 }
                 .labelStyle(.iconOnly)
-                .help("Settings")
+                .keyboardShortcut(",", modifiers: .command)
+                .help("Settings (⌘,)")
 
                 Button("Quit Lumen", systemImage: "power") {
                     NSApplication.shared.terminate(nil)
                 }
                 .labelStyle(.iconOnly)
-                .help("Quit Lumen")
+                .keyboardShortcut("q", modifiers: .command)
+                .help(controller.hasDisconnectedDisplays ? "Quit Lumen (⌘Q). Switched-off displays come back on first." : "Quit Lumen (⌘Q)")
             }
             .buttonStyle(.borderless)
         }
@@ -94,5 +100,25 @@ struct MenuContent: View {
         }
         // Messages describe the last action; don't greet the next visit with stale ones.
         .onDisappear { controller.dismissNotices() }
+    }
+}
+
+/// Asked once: without opening at login, Lumen isn't running after a restart and its shortcuts
+/// do nothing.
+private struct LoginItemOffer: View {
+    @Environment(DisplayController.self) private var controller
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label("Open Lumen at login so your shortcuts still work after a restart?", systemImage: "power.circle")
+                .font(.callout)
+            HStack {
+                Spacer()
+                Button("Not Now") { controller.declineLoginItem() }
+                Button("Open at Login") { controller.acceptLoginItem() }
+                    .buttonStyle(.borderedProminent)
+            }
+            .controlSize(.small)
+        }
     }
 }

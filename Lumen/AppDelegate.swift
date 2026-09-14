@@ -1,8 +1,8 @@
 import AppKit
 import LumenCore
 
-/// Owns the controller and handles what only an app delegate can: `lumen://` links and being
-/// launched again while already running.
+/// Owns the controller and handles what only an app delegate can: `lumen://` links, being
+/// launched again while already running, and quitting.
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     let controller = DisplayController()
@@ -22,5 +22,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         controller.requestSettings()
         return false
+    }
+
+    /// Quitting with monitors switched off would leave them dark with nothing left to bring them
+    /// back, so switch them on first.
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard controller.hasDisconnectedDisplays || controller.isBusy else { return .terminateNow }
+        Task {
+            await controller.prepareToQuit()
+            sender.reply(toApplicationShouldTerminate: true)
+        }
+        return .terminateLater
     }
 }

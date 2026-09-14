@@ -1,20 +1,20 @@
-import ServiceManagement
 import SwiftUI
 
 struct GeneralSettingsView: View {
-    @State private var status = SMAppService.mainApp.status
+    @State private var isEnabled = LoginItem.isEnabled
+    @State private var needsApproval = LoginItem.needsApproval
     @State private var problem: String?
 
     var body: some View {
         Form {
             Section {
                 Toggle("Open Lumen at login", isOn: Binding(
-                    get: { status == .enabled },
+                    get: { isEnabled },
                     set: { setLaunchAtLogin($0) }
                 ))
-                if status == .requiresApproval {
+                if needsApproval {
                     LabeledContent("Lumen needs your approval in Login Items.") {
-                        Button("Open Login Items") { SMAppService.openSystemSettingsLoginItems() }
+                        Button("Open Login Items") { LoginItem.openSystemSettings() }
                     }
                 }
                 if let problem {
@@ -33,20 +33,21 @@ struct GeneralSettingsView: View {
         }
         .formStyle(.grouped)
         // Approval happens in System Settings, so re-read the status whenever this tab appears.
-        .onAppear { status = SMAppService.mainApp.status }
+        .onAppear(perform: readStatus)
     }
 
     private func setLaunchAtLogin(_ enabled: Bool) {
         do {
-            if enabled {
-                try SMAppService.mainApp.register()
-            } else {
-                try SMAppService.mainApp.unregister()
-            }
+            try LoginItem.setEnabled(enabled)
             problem = nil
         } catch {
             problem = error.localizedDescription
         }
-        status = SMAppService.mainApp.status
+        readStatus()
+    }
+
+    private func readStatus() {
+        isEnabled = LoginItem.isEnabled
+        needsApproval = LoginItem.needsApproval
     }
 }
