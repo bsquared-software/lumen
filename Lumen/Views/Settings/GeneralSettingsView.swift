@@ -32,6 +32,8 @@ struct GeneralSettingsView: View {
             }
         }
         .formStyle(.grouped)
+        // Approval happens in System Settings, so re-read the status whenever this tab appears.
+        .onAppear { status = SMAppService.mainApp.status }
     }
 
     private func setLaunchAtLogin(_ enabled: Bool) {

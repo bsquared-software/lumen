@@ -114,7 +114,7 @@ private struct TargetEditor: View {
     @Binding var target: DisplayTarget
     let detail: DisplayDetail?
 
-    private var options: [ResolutionOption] { ModeCatalogue.options(from: detail?.modes ?? []) }
+    private var options: [ResolutionOption] { detail?.options ?? [] }
 
     var body: some View {
         Toggle("Switched on", isOn: $target.connected)
@@ -153,10 +153,10 @@ private struct TargetEditor: View {
                 if let mode = target.mode {
                     HStack {
                         Text(Self.summary(mode))
-                        Button("Leave As It Is") { target.mode = nil }
+                        Button("Don’t Change") { target.mode = nil }
                     }
                 } else {
-                    Text("Leave as it is").foregroundStyle(.secondary)
+                    Text("Don’t Change").foregroundStyle(.secondary)
                 }
             }
         } else {
@@ -169,7 +169,7 @@ private struct TargetEditor: View {
                     target.mode = ModeCatalogue.mode(for: option, refreshRate: rate, in: detail?.modes ?? [])
                 }
             )) {
-                Text("Leave as it is").tag("")
+                Text("Don’t Change").tag("")
                 Section("HiDPI") {
                     ForEach(options.filter(\.isHiDPI)) { Text("\($0.label) HiDPI").tag($0.id) }
                 }
@@ -180,10 +180,13 @@ private struct TargetEditor: View {
 
             if let selected, let mode = target.mode {
                 Picker("Refresh rate", selection: Binding(
-                    get: { mode.refreshRate },
-                    set: { rate in target.mode = ModeCatalogue.mode(for: selected, refreshRate: rate, in: detail?.modes ?? []) }
+                    get: { DisplayMode.refreshKey(mode.refreshRate) },
+                    set: { key in
+                        guard let rate = selected.refreshRates.first(where: { DisplayMode.refreshKey($0) == key }) else { return }
+                        target.mode = ModeCatalogue.mode(for: selected, refreshRate: rate, in: detail?.modes ?? [])
+                    }
                 )) {
-                    ForEach(selected.refreshRates, id: \.self) { Text(ModeCatalogue.refreshLabel($0)).tag($0) }
+                    ForEach(selected.refreshRates, id: \.self) { Text(ModeCatalogue.refreshLabel($0)).tag(DisplayMode.refreshKey($0)) }
                 }
             }
         }

@@ -40,6 +40,11 @@ struct DisplayCard: View {
                     if let brightness = detail.brightness {
                         BrightnessSlider(value: brightness) { controller.setBrightness($0, for: detail.id) }
                     }
+                    if let problem = controller.brightnessErrors[detail.id] {
+                        Label(problem, systemImage: "exclamationmark.triangle")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                     ModePickers(detail: detail)
                 }
             }
@@ -90,7 +95,7 @@ private struct ModePickers: View {
     let detail: DisplayDetail
 
     var body: some View {
-        let options = ModeCatalogue.options(from: detail.modes)
+        let options = detail.options
         let current = detail.currentMode.flatMap { ModeCatalogue.option(containing: $0, in: options) }
 
         HStack(spacing: 8) {
@@ -111,11 +116,15 @@ private struct ModePickers: View {
             }
 
             if let current {
+                // Tagged by rounded key: CoreGraphics reports the same rate with float noise.
                 Picker("Refresh rate", selection: Binding(
-                    get: { detail.currentMode?.refreshRate ?? 0 },
-                    set: { rate in Task { await controller.select(current, refreshRate: rate, for: detail.id) } }
+                    get: { detail.currentMode.map { DisplayMode.refreshKey($0.refreshRate) } ?? 0 },
+                    set: { key in
+                        guard let rate = current.refreshRates.first(where: { DisplayMode.refreshKey($0) == key }) else { return }
+                        Task { await controller.select(current, refreshRate: rate, for: detail.id) }
+                    }
                 )) {
-                    ForEach(current.refreshRates, id: \.self) { Text(ModeCatalogue.refreshLabel($0)).tag($0) }
+                    ForEach(current.refreshRates, id: \.self) { Text(ModeCatalogue.refreshLabel($0)).tag(DisplayMode.refreshKey($0)) }
                 }
                 .frame(width: 92)
             }

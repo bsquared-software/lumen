@@ -140,6 +140,14 @@ monitor back even if Lumen is gone (not yet observed across a logout).
   returning). Re-enabling returns in **~180 ms** but the display takes a further moment to
   appear, so presets poll for it (`waitForOnline`, up to 5 s).
 - DDC brightness read and write each take **~60 ms**; DisplayServices takes ~1 ms.
+- While a display is switched off, its `IOMobileFramebufferShim` **stays in the IORegistry**
+  with the same `ProductAttributes` (checked during a second `blink`). Lumen uses this to tell
+  "switched off" from "unplugged": a flagged record with no matching framebuffer is
+  unavailable. Not yet observed: the registry after physically unplugging a monitor.
+- DDC reads to the *other* monitor can fail transiently while a display is being
+  reconfigured, so Lumen refreshes again once the change settles.
+- `CGDisplayIsActive` is not used: switched-off displays leave the online list entirely, and
+  the flag is also false for sleeping displays.
 
 ## Safety rules (pure, unit-tested)
 

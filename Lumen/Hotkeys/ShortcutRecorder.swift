@@ -38,10 +38,11 @@ struct ShortcutRecorder: View {
     }
 
     private func record(_ event: NSEvent) {
+        let hasModifiers = !event.modifierFlags.intersection([.command, .control, .option, .shift]).isEmpty
         switch event.keyCode {
         case 53:
             stop()
-        case 51, 117:
+        case 51 where !hasModifiers, 117 where !hasModifiers:
             hotkey = nil
             stop()
         default:

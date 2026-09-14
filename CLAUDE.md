@@ -44,6 +44,9 @@ scripts/install.sh               Release build → /Applications
 
 - A disconnected display **vanishes** from `CGGetOnlineDisplayList`. `DisplayRecord` with
   `disconnectedByLumen` is the only handle on it; re-enable uses the remembered display ID.
+- Its framebuffer **stays in the IORegistry** while switched off, which is how Lumen tells
+  switched off from unplugged. `DisplayWorker` owns the records; never keep a second copy
+  that can overwrite them.
 - Disconnect blocks ~1.3 s; reconnect returns in ~180 ms but the display appears later
   (`waitForOnline` polls up to 5 s).
 - Samsung DDC reports brightness max 50; DDC read/write ~60 ms each.

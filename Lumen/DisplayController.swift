@@ -2,8 +2,8 @@ import Foundation
 import LumenCore
 import Observation
 
-/// The app's single source of truth: display state for the UI, presets, and every user
-/// action. Hardware work is delegated to `DisplayWorker`, which runs off the main thread.
+/// The app's single source of truth for the UI: display state, presets and every user action.
+/// Hardware work and the display records live in `DisplayWorker`, off the main thread.
 @MainActor
 @Observable
 final class DisplayController {
@@ -11,26 +11,45 @@ final class DisplayController {
     private(set) var presets: [Preset] = []
     /// Messages from the last action, shown under the display cards.
     private(set) var notices: [String] = []
+    /// Why a monitor ignored the brightness slider, by display UUID.
+    private(set) var brightnessErrors: [String: String] = [:]
     private(set) var isBusy = false
     /// The preset applied most recently, until the user changes something by hand.
     private(set) var activePresetID: Preset.ID?
     private(set) var hotkeyProblems: [Preset.ID: String] = [:]
 
-    @ObservationIgnored private var records: [DisplayRecord] = []
     @ObservationIgnored private let store: StateStore
     @ObservationIgnored private let worker: DisplayWorker
-    @ObservationIgnored private let coalescer: BrightnessCoalescer
+    @ObservationIgnored private var coalescer: BrightnessCoalescer?
     @ObservationIgnored private let hotkeys = HotkeyCenter()
+    @ObservationIgnored private var records: [DisplayRecord]
+    @ObservationIgnored private var lastSaved: LumenState?
+    /// False when an unreadable settings file could not be moved aside, so it is never
+    /// overwritten.
+    @ObservationIgnored private var canPersist: Bool
+    /// A display change arrived during an action and still needs a refresh.
+    @ObservationIgnored private var needsRefresh = false
     @ObservationIgnored private var observation: Task<Void, Never>?
     @ObservationIgnored private var pendingRefresh: Task<Void, Never>?
     @ObservationIgnored private var started = false
 
     init(backend: any DisplayBackend = SystemDisplayBackend(), store: StateStore = .applicationSupport()) {
-        let worker = DisplayWorker(backend: backend)
+        let loaded = Self.loadState(from: store)
+        let worker = DisplayWorker(backend: backend, records: loaded.state?.displays ?? [])
         self.store = store
         self.worker = worker
-        self.coalescer = BrightnessCoalescer { uuid, value in
-            try? await worker.setBrightness(value, uuid: uuid)
+        self.records = loaded.state?.displays ?? []
+        self.presets = loaded.state?.presets ?? []
+        self.lastSaved = loaded.state
+        self.notices = loaded.notices
+        self.canPersist = loaded.canPersist
+        self.coalescer = BrightnessCoalescer { [weak self] uuid, value in
+            do {
+                try await worker.setBrightness(value, uuid: uuid)
+                await self?.setBrightnessError(nil, for: uuid)
+            } catch {
+                await self?.setBrightnessError(error.localizedDescription, for: uuid)
+            }
         }
     }
 
@@ -43,7 +62,6 @@ final class DisplayController {
     func start() async {
         guard !started else { return }
         started = true
-        loadState()
         await refresh()
 
         if presets.isEmpty {
@@ -56,17 +74,18 @@ final class DisplayController {
     }
 
     func refresh() async {
-        let snapshot = await worker.snapshot(records: records)
-        records = snapshot.records
+        let snapshot = await worker.snapshot()
         displays = snapshot.displays
+        records = snapshot.records
         persist()
     }
 
     // MARK: Display actions
 
     func setConnected(_ connected: Bool, _ uuid: String) async {
+        guard !isBusy else { return }
         activePresetID = nil
-        await run { [records, worker] in await worker.setConnected(connected, uuid: uuid, records: records) }
+        await run { [worker] in await worker.setConnected(connected, uuid: uuid) }
     }
 
     func setBrightness(_ value: Double, for uuid: String) {
@@ -74,36 +93,39 @@ final class DisplayController {
         if let index = displays.firstIndex(where: { $0.id == uuid }) {
             displays[index].brightness = value
         }
+        guard let coalescer else { return }
         Task { await coalescer.submit(uuid: uuid, value: value) }
     }
 
     func select(_ option: ResolutionOption, refreshRate: Double?, for uuid: String) async {
-        guard let detail = displays.first(where: { $0.id == uuid }),
+        guard !isBusy,
+              let detail = displays.first(where: { $0.id == uuid }),
               let rate = refreshRate ?? ModeCatalogue.preferredRefreshRate(for: option, current: detail.currentMode?.refreshRate),
               let mode = ModeCatalogue.mode(for: option, refreshRate: rate, in: detail.modes)
         else { return }
 
         activePresetID = nil
-        do {
-            try await worker.setMode(mode, uuid: uuid)
-            notices = []
-        } catch {
-            notices = ["\(detail.known.info.name): \(error.localizedDescription)"]
+        await run { [worker] in
+            do {
+                try await worker.setMode(mode, uuid: uuid)
+                return RunReport()
+            } catch {
+                return RunReport(failures: [DisplayFailure(name: detail.known.info.name, reason: .backend(error.localizedDescription))])
+            }
         }
-        await refresh()
     }
 
     func reconnectAll() async {
+        guard !isBusy else { return }
         activePresetID = nil
-        await run { [records, worker] in await worker.reconnectAll(records: records) }
+        await run { [worker] in await worker.reconnectAll() }
     }
 
     // MARK: Presets
 
     func apply(_ preset: Preset) async {
-        guard !isBusy else { return }
-        await run { [records, worker] in await worker.apply(preset, records: records) }
-        activePresetID = preset.id
+        guard let report = await run({ [worker] in await worker.apply(preset) }) else { return }
+        activePresetID = report.failures.isEmpty ? preset.id : nil
     }
 
     func apply(presetID: Preset.ID) async {
@@ -121,7 +143,7 @@ final class DisplayController {
 
     func updateFromCurrentSetup(_ presetID: Preset.ID) {
         guard let index = presets.firstIndex(where: { $0.id == presetID }) else { return }
-        presets[index].displays = PresetFactory.capture(name: "", symbol: "", displays: capturedDisplays()).displays
+        presets[index] = PresetFactory.updating(presets[index], from: capturedDisplays())
         persist()
     }
 
@@ -161,50 +183,80 @@ final class DisplayController {
 
     // MARK: Private
 
-    private func run(_ operation: () async -> WorkerResult) async {
+    /// Runs one action at a time. Returns `nil` without doing anything if another is running.
+    @discardableResult
+    private func run(_ operation: () async -> RunReport) async -> RunReport? {
+        guard !isBusy else { return nil }
         isBusy = true
-        defer { isBusy = false }
-        let result = await operation()
-        records = result.records
-        notices = result.report.messages
+        let report = await operation()
+        notices = report.messages
         await refresh()
+        isBusy = false
+
+        if needsRefresh {
+            needsRefresh = false
+            scheduleRefresh()
+        }
+        return report
+    }
+
+    private func setBrightnessError(_ message: String?, for uuid: String) {
+        guard brightnessErrors[uuid] != message else { return }
+        brightnessErrors[uuid] = message
     }
 
     private func capturedDisplays() -> [CapturedDisplay] {
         displays.map { CapturedDisplay(display: $0.known, brightness: $0.brightness, mode: $0.currentMode) }
     }
 
-    private func loadState() {
+    private nonisolated static func loadState(from store: StateStore) -> (state: LumenState?, notices: [String], canPersist: Bool) {
         do {
-            guard let state = try store.load() else { return }
-            records = state.displays
-            presets = state.presets
+            return (try store.load(), [], true)
         } catch {
-            let moved = try? store.quarantineCorruptFile()
-            notices = ["Lumen couldn’t read its saved settings, so it started fresh."
-                + (moved.map { " The old file is at \($0.path)." } ?? "")]
+            do {
+                let moved = try store.quarantineCorruptFile()
+                return (nil, ["Lumen couldn’t read its saved settings, so it started fresh. The old file is at \(moved.path)."], true)
+            } catch {
+                return (nil, ["Lumen couldn’t read its saved settings at \(store.fileURL.path). Changes won’t be saved until that file is fixed or removed."], false)
+            }
         }
     }
 
     private func persist() {
+        let state = LumenState(displays: records, presets: presets)
+        guard canPersist, state != lastSaved else { return }
         do {
-            try store.save(LumenState(displays: records, presets: presets))
+            try store.save(state)
+            lastSaved = state
         } catch {
             notices = ["Lumen couldn’t save its settings: \(error.localizedDescription)"]
         }
     }
 
-    /// Display changes arrive in bursts of callbacks; refresh once they settle.
+    /// Display changes arrive in bursts of callbacks. Refresh once they settle, or after the
+    /// current action if one is running.
     private func observeReconfiguration() {
         observation = Task { [weak self] in
             for await _ in DisplayReconfigurationObserver.changes() {
                 guard let self else { return }
-                self.pendingRefresh?.cancel()
-                self.pendingRefresh = Task {
-                    try? await Task.sleep(for: .milliseconds(400))
-                    guard !Task.isCancelled, !self.isBusy else { return }
-                    await self.refresh()
+                if self.isBusy {
+                    self.needsRefresh = true
+                } else {
+                    self.scheduleRefresh()
                 }
+            }
+        }
+    }
+
+    private func scheduleRefresh() {
+        pendingRefresh?.cancel()
+        pendingRefresh = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(400))
+            guard !Task.isCancelled, let self else { return }
+            if self.isBusy {
+                self.needsRefresh = true
+            } else {
+                await self.refresh()
             }
         }
     }
