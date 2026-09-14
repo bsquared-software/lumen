@@ -127,9 +127,19 @@ model, serial, built-in flag, last known display ID, and whether Lumen disconnec
 The menu lists known-but-offline displays with their switch off, so they can always be
 switched back on, including after the app restarts.
 
-Disconnects are applied with `.forSession`, so a logout or reboot always brings every
-monitor back even if Lumen is gone. (To confirm on hardware; if macOS ignores the scope
-for enable/disable, note it here.)
+Disconnects are applied with `.forSession`, so a logout or reboot should always bring every
+monitor back even if Lumen is gone (not yet observed across a logout).
+
+**Hardware findings (2026-09-14, `lumen-probe blink` on the LS32D70xE):**
+
+- A disconnected display **vanishes from `CGGetOnlineDisplayList` entirely**; it is not
+  reported as online-but-inactive. The saved record is the only handle on it.
+- Re-enabling with the remembered `CGDirectDisplayID` works. The display returned with the
+  **same ID (3)**, the same HiDPI mode and the same DDC brightness.
+- `CGSConfigureDisplayEnabled(false)` blocks for **~1.3 s** (macOS moves windows before
+  returning). Re-enabling returns in **~180 ms** but the display takes a further moment to
+  appear, so presets poll for it (`waitForOnline`, up to 5 s).
+- DDC brightness read and write each take **~60 ms**; DisplayServices takes ~1 ms.
 
 ## Safety rules (pure, unit-tested)
 

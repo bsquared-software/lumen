@@ -9,6 +9,8 @@ let package = Package(
     ],
     targets: [
         .target(name: "LumenCore"),
+        // Debug-only command-line harness for checking the backend against real hardware.
+        .executableTarget(name: "lumen-probe", dependencies: ["LumenCore"]),
         .testTarget(name: "LumenCoreTests", dependencies: ["LumenCore"]),
     ]
 )
