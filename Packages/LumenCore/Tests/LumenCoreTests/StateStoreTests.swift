@@ -15,7 +15,8 @@ import Testing
         let state = LumenState(
             displays: [DisplayRecord(info: Desk.ls32, disconnectedByLumen: true, customName: "Right")],
             presets: [Desk.night, Desk.day],
-            activePresetID: Desk.night.id
+            activePresetID: Desk.night.id,
+            hasOfferedLoginItem: true
         )
         try store.save(state)
         #expect(try store.load() == state)
@@ -58,6 +59,7 @@ import Testing
 
         let state = try #require(try store.load())
         #expect(state.activePresetID == nil)
+        #expect(state.hasOfferedLoginItem == nil)
         #expect(state.displays.first?.customName == nil)
         #expect(state.displays.first?.info.originX == nil)
     }

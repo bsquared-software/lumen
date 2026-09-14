@@ -77,4 +77,58 @@ import Testing
         #expect(PresetFactory.uniqueName("New Preset", existing: ["New Preset"]) == "New Preset 2")
         #expect(PresetFactory.uniqueName("New Preset", existing: ["New Preset", "New Preset 2"]) == "New Preset 3")
     }
+
+    @Test func findsAttachedDisplaysMissingFromAPreset() {
+        let laptopOnly = Preset(name: "Laptop", symbol: "laptopcomputer", displays: [
+            DisplayTarget(uuid: "BUILTIN", name: "Built-in Display", connected: true),
+        ])
+        let displays = [Desk.known(Desk.g81, .online), Desk.known(Desk.builtin, .online), Desk.known(Desk.ls32, .unavailable)]
+        #expect(PresetFactory.missingDisplays(in: laptopOnly, from: displays).map(\.id) == ["G81"])
+    }
+
+    @Test func addingADisplayLeavesItOnWithNoChanges() {
+        let withoutG81 = PresetFactory.removing("G81", from: Desk.night)
+        let added = PresetFactory.adding(Desk.known(Desk.g81, .online), to: withoutG81)
+        #expect(added.displays.last == DisplayTarget(uuid: "G81", name: "Odyssey G81SF", connected: true))
+        #expect(PresetFactory.adding(Desk.known(Desk.g81, .online), to: added).displays.count == added.displays.count)
+    }
+
+    @Test func addingUsesTheCustomName() {
+        let named = KnownDisplay(info: Desk.g81, status: .online, customName: "Left OLED")
+        let preset = Preset(name: "Empty", symbol: "display", displays: [])
+        #expect(PresetFactory.adding(named, to: preset).displays.first?.name == "Left OLED")
+    }
+
+    @Test func removingADisplayDropsOnlyThatTarget() {
+        #expect(PresetFactory.removing("LS32", from: Desk.night).displays.map(\.uuid) == ["G81", "BUILTIN"])
+    }
+
+    @Test func duplicatingCopiesDisplaysButNotTheShortcut() {
+        var night = Desk.night
+        night.hotkey = Hotkey(keyCode: 45, modifiers: HotkeyModifiers.control | HotkeyModifiers.option, keyLabel: "N")
+        let copy = PresetFactory.duplicate(night, existingNames: ["Night", "Day", "Night Copy"])
+
+        #expect(copy.id != night.id)
+        #expect(copy.name == "Night Copy 2")
+        #expect(copy.symbol == night.symbol)
+        #expect(copy.hotkey == nil)
+        #expect(copy.displays == night.displays)
+    }
+
+    @Test func targetsFollowTheDeskOrder() {
+        var night = Desk.night
+        night.displays.append(DisplayTarget(uuid: "GONE", name: "Old TV", connected: false))
+        let desk = [Desk.known(Desk.g81, .online), Desk.known(Desk.builtin, .online), Desk.known(Desk.ls32, .online)]
+        #expect(PresetFactory.deskOrder(of: night.displays, displays: desk) == ["G81", "BUILTIN", "LS32", "GONE"])
+    }
+
+    @Test func namesMustBePresentForLinksToWork() {
+        #expect(PresetFactory.nameProblem("  ", for: Desk.night.id, in: [Desk.night, Desk.day]) == "Give this preset a name so its link works.")
+    }
+
+    @Test func duplicateNamesAreFlagged() {
+        #expect(PresetFactory.nameProblem("day", for: Desk.night.id, in: [Desk.night, Desk.day])
+            == "Another preset is called “Day”, so a link to this name applies whichever comes first.")
+        #expect(PresetFactory.nameProblem("Night", for: Desk.night.id, in: [Desk.night, Desk.day]) == nil)
+    }
 }

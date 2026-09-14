@@ -1,3 +1,5 @@
+import Foundation
+
 /// A display's live values at the moment "Save current as preset" is pressed.
 public struct CapturedDisplay: Sendable {
     public var display: KnownDisplay
@@ -75,5 +77,52 @@ public enum PresetFactory {
         let taken = Set(existing)
         guard taken.contains(base) else { return base }
         return (2...).lazy.map { "\(base) \($0)" }.first { !taken.contains($0) }!
+    }
+
+    /// Displays attached now that the preset doesn't mention yet.
+    public static func missingDisplays(in preset: Preset, from displays: [KnownDisplay]) -> [KnownDisplay] {
+        displays.filter { display in
+            display.status != .unavailable && !preset.displays.contains { $0.uuid == display.id }
+        }
+    }
+
+    /// Adds a display that stays on with nothing changed, ready to be configured.
+    public static func adding(_ display: KnownDisplay, to preset: Preset) -> Preset {
+        guard !preset.displays.contains(where: { $0.uuid == display.id }) else { return preset }
+        var updated = preset
+        updated.displays.append(DisplayTarget(uuid: display.id, name: display.displayName, connected: true))
+        return updated
+    }
+
+    public static func removing(_ uuid: String, from preset: Preset) -> Preset {
+        var updated = preset
+        updated.displays.removeAll { $0.uuid == uuid }
+        return updated
+    }
+
+    /// A copy with a new ID and name. The shortcut is left off, since two presets can't share one.
+    public static func duplicate(_ preset: Preset, existingNames: [String]) -> Preset {
+        Preset(name: uniqueName("\(preset.name) Copy", existing: existingNames), symbol: preset.symbol, displays: preset.displays)
+    }
+
+    /// The preset's display UUIDs in the order the displays sit on the desk; displays Lumen no
+    /// longer knows come last.
+    public static func deskOrder(of targets: [DisplayTarget], displays: [KnownDisplay]) -> [String] {
+        let position = Dictionary(displays.enumerated().map { ($1.id, $0) }, uniquingKeysWith: { first, _ in first })
+        return targets.enumerated()
+            .sorted { lhs, rhs in
+                (position[lhs.element.uuid] ?? Int.max, lhs.offset) < (position[rhs.element.uuid] ?? Int.max, rhs.offset)
+            }
+            .map(\.element.uuid)
+    }
+
+    /// Why a preset name would make its link unreliable, or `nil` when it's fine.
+    public static func nameProblem(_ name: String, for presetID: UUID, in presets: [Preset]) -> String? {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return "Give this preset a name so its link works." }
+        if let other = presets.first(where: { $0.id != presetID && $0.name.caseInsensitiveCompare(trimmed) == .orderedSame }) {
+            return "Another preset is called “\(other.name)”, so a link to this name applies whichever comes first."
+        }
+        return nil
     }
 }

@@ -6,10 +6,10 @@ actor AppliedValues {
     func record(_ uuid: String, _ value: Double) { values.append((uuid, value)) }
 }
 
-@Suite struct BrightnessCoalescerTests {
+@Suite struct AdjustmentCoalescerTests {
     @Test func rapidChangesCollapseToTheLatestValue() async {
         let applied = AppliedValues()
-        let coalescer = BrightnessCoalescer { uuid, value in
+        let coalescer = AdjustmentCoalescer { uuid, value in
             await applied.record(uuid, value)
             try? await Task.sleep(for: .milliseconds(30))
         }
@@ -25,7 +25,7 @@ actor AppliedValues {
 
     @Test func eachDisplayDrainsIndependently() async {
         let applied = AppliedValues()
-        let coalescer = BrightnessCoalescer { uuid, value in await applied.record(uuid, value) }
+        let coalescer = AdjustmentCoalescer { uuid, value in await applied.record(uuid, value) }
         await coalescer.submit(uuid: "LS32", value: 0.3)
         await coalescer.submit(uuid: "G81", value: 0.7)
         await coalescer.waitUntilIdle()
@@ -37,7 +37,7 @@ actor AppliedValues {
 
     @Test func aValueSubmittedAfterIdleIsStillApplied() async {
         let applied = AppliedValues()
-        let coalescer = BrightnessCoalescer { uuid, value in await applied.record(uuid, value) }
+        let coalescer = AdjustmentCoalescer { uuid, value in await applied.record(uuid, value) }
         await coalescer.submit(uuid: "LS32", value: 0.2)
         await coalescer.waitUntilIdle()
         await coalescer.submit(uuid: "LS32", value: 0.9)

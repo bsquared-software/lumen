@@ -27,18 +27,24 @@ public struct DisplayFailure: Equatable, Sendable {
 public struct RunReport: Equatable, Sendable {
     public var skipped: [PlanSkip]
     public var failures: [DisplayFailure]
+    /// Set to the preset's name when none of its displays were plugged in, so nothing happened.
+    public var unattachedPreset: String?
 
-    public init(skipped: [PlanSkip] = [], failures: [DisplayFailure] = []) {
+    public init(skipped: [PlanSkip] = [], failures: [DisplayFailure] = [], unattachedPreset: String? = nil) {
         self.skipped = skipped
         self.failures = failures
+        self.unattachedPreset = unattachedPreset
     }
 
     public var isClean: Bool { skipped.isEmpty && failures.isEmpty }
 
+    /// Displays that are simply unplugged don't get a message: applying Night on the laptop
+    /// alone would otherwise complain about every monitor, every time.
     public var messages: [String] {
-        let skips = skipped.map { skip in
+        let unattached = unattachedPreset.map { ["None of \($0)’s displays are plugged in, so nothing changed."] } ?? []
+        let skips: [String] = skipped.compactMap { skip in
             switch skip {
-            case .notAttached(let name): "\(name) isn’t plugged in, so it was skipped."
+            case .notAttached: nil
             case .builtinStaysOn: "The built-in display always stays on in presets."
             case .wouldLeaveNoDisplay(let name): "\(name) stayed on so you’re not left without a screen."
             }
@@ -50,6 +56,6 @@ public struct RunReport: Equatable, Sendable {
             case .backend(let message): "\(failure.name): \(message)"
             }
         }
-        return skips + problems
+        return unattached + skips + problems
     }
 }

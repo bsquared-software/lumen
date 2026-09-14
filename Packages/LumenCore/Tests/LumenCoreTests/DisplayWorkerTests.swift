@@ -204,10 +204,48 @@ import Testing
             skipped: [.notAttached(name: "Old TV"), .wouldLeaveNoDisplay(name: "LS32D70xE")],
             failures: [DisplayFailure(name: "Odyssey G81SF", reason: .didNotComeBack)]
         )
+        // Unplugged displays are expected when undocked, so they don't produce a message.
         #expect(report.messages == [
-            "Old TV isn’t plugged in, so it was skipped.",
             "LS32D70xE stayed on so you’re not left without a screen.",
             "Odyssey G81SF didn’t come back. Try unplugging it and plugging it in again.",
         ])
+    }
+
+    @Test func applyingNightWhileUndockedSaysNothing() async {
+        let backend = FakeBackend(displays: [Desk.builtin])
+        let report = await Self.worker(backend, records: Self.allRecords).apply(Desk.night)
+
+        #expect(backend.calls == [.setBrightness(0.10, 1)])
+        #expect(report.messages.isEmpty)
+    }
+
+    @Test func aPresetWithNoDisplaysPluggedInSaysSo() async {
+        let gaming = Preset(name: "Gaming", symbol: "gamecontroller", displays: [
+            DisplayTarget(uuid: "G81", name: "Odyssey G81SF", connected: true, mode: Desk.hiDPI1440),
+        ])
+        let backend = FakeBackend(displays: [Desk.builtin])
+        let report = await Self.worker(backend, records: Self.allRecords).apply(gaming)
+
+        #expect(backend.calls.isEmpty)
+        #expect(report.messages == ["None of Gaming’s displays are plugged in, so nothing changed."])
+    }
+
+    @Test func forgettingRemovesOnlyDisplaysThatAreGone() async {
+        let backend = FakeBackend(displays: Self.desk, enabled: [1, 2])
+        backend.configure { $0.pluggedIn = [1, 2] }
+        let tv = DisplayInfo.fixture(uuid: "TV", name: "Hotel TV", displayID: 9, vendor: 7, model: 7, serial: 7)
+        let records = Self.allRecords + [DisplayRecord(info: tv, disconnectedByLumen: false)]
+        let worker = Self.worker(backend, records: records)
+
+        await worker.forget(uuid: "TV")
+        await worker.forget(uuid: "G81")
+        #expect(await worker.snapshot().records.map(\.id) == ["BUILTIN", "G81", "LS32"])
+    }
+
+    @Test func forgettingKeepsASwitchedOffDisplaySoItCanComeBack() async {
+        let backend = FakeBackend(displays: Self.desk, enabled: [1])
+        let worker = Self.worker(backend, records: Self.nightRecords)
+        await worker.forget(uuid: "LS32")
+        #expect(await worker.snapshot().records.contains { $0.id == "LS32" })
     }
 }

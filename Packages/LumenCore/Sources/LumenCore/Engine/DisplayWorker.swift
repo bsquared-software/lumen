@@ -111,6 +111,14 @@ public actor DisplayWorker {
         }
     }
 
+    /// Removes a display Lumen no longer needs to remember, e.g. a hotel TV. Only displays that
+    /// are not attached can be forgotten; a switched-off monitor must stay remembered so it can
+    /// be switched back on.
+    public func forget(uuid: String) {
+        guard knownDisplays().first(where: { $0.id == uuid })?.status == .unavailable else { return }
+        records.removeAll { $0.id == uuid }
+    }
+
     public func setBrightness(_ value: Double, uuid: String) throws {
         guard let info = onlineInfo(uuid) else { return }
         try backend.setBrightness(value, of: info)
@@ -145,6 +153,10 @@ public actor DisplayWorker {
     public func apply(_ preset: Preset) async -> RunReport {
         let plan = PresetPlanner.plan(preset, displays: knownDisplays())
         var report = RunReport(skipped: plan.skipped)
+        let onlyUnplugged = plan.skipped.allSatisfy { if case .notAttached = $0 { true } else { false } }
+        if plan.steps.isEmpty, !plan.skipped.isEmpty, onlyUnplugged {
+            report.unattachedPreset = preset.name
+        }
         var unreachable = Set<String>()
 
         for step in plan.steps {
