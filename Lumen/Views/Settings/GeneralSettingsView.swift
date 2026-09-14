@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct GeneralSettingsView: View {
@@ -26,6 +27,12 @@ struct GeneralSettingsView: View {
 
             Section("About") {
                 LabeledContent("Version", value: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "–")
+                LabeledContent("Lumen has no app menu, so its About window lives here.") {
+                    Button("About Lumen") {
+                        NSApplication.shared.activate()
+                        NSApplication.shared.orderFrontStandardAboutPanel(nil)
+                    }
+                }
                 Text("Lumen switches displays and brightness through private macOS interfaces. A macOS update can stop a feature working until Lumen is updated.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
