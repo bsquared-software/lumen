@@ -1,4 +1,15 @@
-# Lumen
+<p align="center"><img src="docs/images/icon.png" width="128" alt="Lumen app icon"></p>
+
+<h1 align="center">Lumen</h1>
+
+<p align="center">A native macOS menu bar app for switching monitors on and off, brightness over DDC, resolutions and presets.</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/macOS-26%2B-08090A?logo=apple&logoColor=white" alt="macOS 26+">
+  <img src="https://img.shields.io/badge/Swift-6-08090A?logo=swift&logoColor=F05138" alt="Swift 6">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/licence-MIT-3FCB86" alt="MIT licence"></a>
+  <a href="https://bsquared.software"><img src="https://img.shields.io/badge/built%20by-BSquared-3FCB86" alt="Built by BSquared"></a>
+</p>
 
 A native macOS menu bar app for the displays on a MacBook. It does the parts of
 BetterDisplay that get used every day, in a friendlier UI:
@@ -97,3 +108,8 @@ xcodegen generate && open Lumen.xcodeproj
 ```
 
 The design and the plan it was built from are in `docs/plans/`.
+
+## Licence
+
+[MIT](LICENSE). Built and maintained by [BSquared](https://bsquared.software), a UK software
+studio. Issues and pull requests are welcome.
