@@ -1,7 +1,7 @@
 # Lumen
 
 Native macOS menu bar display manager (SwiftUI, macOS 26, Swift 6 strict concurrency).
-BSquared personal tool. GitHub: `bsquared-software/lumen` (private).
+BSquared open-source tool (MIT). GitHub: `bsquared-software/lumen` (public: never commit secrets or client details).
 
 - Design + hardware findings: `docs/plans/2026-09-14-lumen-design.md`
 - v1 plan: `docs/plans/2026-09-14-lumen-v1.md`
